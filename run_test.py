@@ -60,14 +60,3 @@ def run_verification():
 
         print("\n" + "=" * 60)
 
-    except Exception as err:
-        print(f"[-] Test failed: {err}")
-
-
-if __name__ == "__main__":
-    run_verification()
-        print(f"[-] Test failed: {err}")
-
-
-if __name__ == "__main__":
-    run_verification()
