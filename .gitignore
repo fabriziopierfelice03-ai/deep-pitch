@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+venv/
+env/
+matches_enriched_xg_top5_2014_2026.csv
