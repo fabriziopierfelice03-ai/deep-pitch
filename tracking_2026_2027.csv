@@ -1,0 +1,4 @@
+Date,League,Match,Bet,Bookmaker_odds,Model_probability,Fair_odds,EV_Perc,Stake_euro,Result,Profit,Bankroll
+30/08/26,I1,Napoli-Como,1,2.25,50%,2.0,12.5,50,2,-50,950
+30/08/26,I1,Lazio-Genoa,1,2.30,52.5%,"1,94",19.6,75,1, 97.5,1047
+31/08/26,I1,Atalanta-Bologna,1,2.00,57%,"1,75",14,70,1,70,1117
