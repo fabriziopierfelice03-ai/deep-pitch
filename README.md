@@ -17,10 +17,10 @@ To ensure zero lookahead bias and absolute empirical validation, all value bets 
 | Metric | Recorded Value |
 | --- | --- |
 | **Starting Bankroll** | €1,000.00 |
-| **Current Bankroll** | **€1,117.00** |
-| **Absolute P&L** | **+€117.00** |
-| **Yield / ROI** | **+11.70%** |
-| **Record** | 2W – 1L (66.7% Win Rate) |
+| **Current Bankroll** | **€1,067.70** |
+| **Absolute P&L** | **+€67.70** |
+| **Yield / ROI** | **+6.77%** |
+| **Record** | 6W – 6L (50.0% Win Rate) |
 | **Sample Start** | Matchday 2 |
 | **Full Audit Trail** | [`tracking_2026_2027.csv`](https://www.google.com/search?q=./tracking_2026_2027.csv) |
 
