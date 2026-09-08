@@ -195,6 +195,28 @@ def stampa_report_partita(res, nome_casa="Casa", nome_trasf="Trasferta"):
 
 
 
-res=predici_partita("I1", [1793.93, 1728.45, 5.0, 14.0, 3.0, 0.0, 2.1333, 0.5333, 0.3333, 2.8, 1.5907, 1.0827, 1.2213, 0.8267, 1.0193, 1.364, 0.628, 0.9533, 1.5333, 1.0667, 0.0, 1.6, 1.0, 1.6, 0.6667, 0.8, 0.0573, 0.016, 1.8, 1.2, 1.2, 0.4, 1.084, 0.842, 1.2, 1.0, 8.0, 7.0, 2.0, 2.0, 0.0, 0.0, -3.0, 0.0, -3.0, 3.0, 0.0, 2.0, 1.0, 13.7333, 13.3333, 4.9333, 3.6, 5.0, 7.9333, 0.8667, 2.8667]
-)
-stampa_report_partita(res, "Atalanta", "Bologna")
+res=predici_partita("I1", [
+    # [0-1] Elo
+    1620.0, 1740.0,
+    # [2-5] Classifica & Punti
+    8.0, 10.0, 3.0, 4.0,
+    # [6-9] Forma Punti (Overall e Venue)
+    1.0, 1.133, 1.667, 0.0,
+    # [10-17] xG & xGA (Overall e Venue)
+    1.637, 1.343, 1.978, 0.350, 1.910, 1.398, 1.944, 3.070,
+    # [18-25] Gol Fatti & Subiti (Overall e Venue)
+    1.267, 1.467, 1.667, 0.0, 2.067, 1.933, 2.0, 4.0,
+    # [26-27] Finishing Efficiency
+    0.370, -0.124,
+    # [28-35] Head to Head (Punti, Gol, xG)
+    1.3, 1.3, 1.4, 1.2, 1.33, 1.14, 1.5, 1.5,
+    # [36-40] Fatica & Derby
+    7.0, 7.0, 2.0, 2.0, 0.0,
+    # [41-46] Distanze Punti Tabella
+    -2.0, -3.0, -1.0, -2.0, 3.0, 3.0,
+    # [47-48] Giornata e Metà Stagione
+    4.0, 1.0,
+    # [49-56] Statistiche Eventi (Tiri, SOT, Corner, Cartellini)
+    17.0, 13.8, 6.4, 4.933, 5.667, 4.6, 1.467, 1.733
+])
+stampa_report_partita(res, "Venezia", "Fiorentina")
