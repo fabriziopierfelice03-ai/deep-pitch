@@ -21,8 +21,10 @@ To ensure zero lookahead bias and absolute empirical validation, all value bets 
 | **Absolute P&L** | **+€67.70** |
 | **Yield / ROI** | **+6.77%** |
 | **Record** | 6W – 6L (50.0% Win Rate) |
+| **Pending Bets** | 14 active (Matchday 4: 11–14 Sep 2026) |
+| **Active Portfolio Heat** | €266.87 (24.99% Bankroll) |
 | **Sample Start** | Matchday 2 |
-| **Full Audit Trail** | [`tracking_2026_2027.csv`](https://www.google.com/search?q=./tracking_2026_2027.csv) |
+| **Full Audit Trail** | [`tracking_2026_2027.csv`](./tracking_2026_2027.csv) |
 
 ---
 
@@ -154,7 +156,10 @@ $$\text{EV} = (P_{\text{model}} \times \text{Odds}_{\text{Bookmaker}}) - 1 \ge +
 │   └── matches_sample.csv          # Sample subset of the 2014-2026 enriched dataset
 ├── src/
 │   ├── train_and_export.py         # Full PyTorch training routine & checkpoint exporter
+│   ├── feature_builder.py          # Deterministic feature assembly & validation engine
 │   └── predict.py                  # Standalone inference & dual pricing engine
+├── tests/
+│   └── test_feature_builder.py     # Deterministic feature assembly test suite
 ├── agent_prompt_template.md        # Prompt schema for Agentic AI data extraction
 ├── tracking_2026_2027.csv          # Live, timestamped paper trading log
 ├── requirements.txt                # Minimal environment dependencies
