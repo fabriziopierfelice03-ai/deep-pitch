@@ -195,28 +195,29 @@ def stampa_report_partita(res, nome_casa="Casa", nome_trasf="Trasferta"):
 
 
 
-res=predici_partita("I1", [
-    # [0-1] Elo
-    1620.0, 1740.0,
-    # [2-5] Classifica & Punti
-    8.0, 10.0, 3.0, 4.0,
-    # [6-9] Forma Punti (Overall e Venue)
-    1.0, 1.133, 1.667, 0.0,
-    # [10-17] xG & xGA (Overall e Venue)
-    1.637, 1.343, 1.978, 0.350, 1.910, 1.398, 1.944, 3.070,
-    # [18-25] Gol Fatti & Subiti (Overall e Venue)
-    1.267, 1.467, 1.667, 0.0, 2.067, 1.933, 2.0, 4.0,
-    # [26-27] Finishing Efficiency
-    0.370, -0.124,
-    # [28-35] Head to Head (Punti, Gol, xG)
-    1.3, 1.3, 1.4, 1.2, 1.33, 1.14, 1.5, 1.5,
-    # [36-40] Fatica & Derby
-    7.0, 7.0, 2.0, 2.0, 0.0,
-    # [41-46] Distanze Punti Tabella
-    -2.0, -3.0, -1.0, -2.0, 3.0, 3.0,
-    # [47-48] Giornata e Metà Stagione
-    4.0, 1.0,
-    # [49-56] Statistiche Eventi (Tiri, SOT, Corner, Cartellini)
-    17.0, 13.8, 6.4, 4.933, 5.667, 4.6, 1.467, 1.733
-])
-stampa_report_partita(res, "Venezia", "Fiorentina")
+if __name__ == "__main__":
+    res=predici_partita("I1", [
+        # [0-1] Elo
+        1620.0, 1740.0,
+        # [2-5] Classifica & Punti
+        8.0, 10.0, 3.0, 4.0,
+        # [6-9] Forma Punti (Overall e Venue)
+        1.0, 1.133, 1.667, 0.0,
+        # [10-17] xG & xGA (Overall e Venue)
+        1.637, 1.343, 1.978, 0.350, 1.910, 1.398, 1.944, 3.070,
+        # [18-25] Gol Fatti & Subiti (Overall e Venue)
+        1.267, 1.467, 1.667, 0.0, 2.067, 1.933, 2.0, 4.0,
+        # [26-27] Finishing Efficiency
+        0.370, -0.124,
+        # [28-35] Head to Head (Punti, Gol, xG)
+        1.3, 1.3, 1.4, 1.2, 1.33, 1.14, 1.5, 1.5,
+        # [36-40] Fatica & Derby
+        7.0, 7.0, 2.0, 2.0, 0.0,
+        # [41-46] Distanze Punti Tabella
+        -2.0, -3.0, -1.0, -2.0, 3.0, 3.0,
+        # [47-48] Giornata e Metà Stagione
+        4.0, 1.0,
+        # [49-56] Statistiche Eventi (Tiri, SOT, Corner, Cartellini)
+        17.0, 13.8, 6.4, 4.933, 5.667, 4.6, 1.467, 1.733
+    ])
+    stampa_report_partita(res, "Venezia", "Fiorentina")

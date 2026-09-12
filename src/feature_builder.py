@@ -74,15 +74,22 @@ def calculate_weighted_average(values: List[float], weights: Optional[List[float
     return weighted_sum / total_w
 
 
-def build_team_metrics(matches: List[MatchRecord], target_venue: Optional[str] = None) -> Dict[str, float]:
+def build_team_metrics(
+    matches: List[MatchRecord],
+    target_venue: Optional[str] = None,
+    fallback_metrics: Optional[Dict[str, float]] = None
+) -> Dict[str, float]:
     """
-    Estrae le medie ponderate da una lista di MatchRecord ordinati dal più recente al più vecchio.
-    Se target_venue è specificato ('H' o 'A'), filtra esclusivamente per quella sede (split metrics).
+    Estrae le medie ponderate da una lista di MatchRecord ordinati dal piu recente al piu vecchio.
+    Se target_venue e specificato ('H' o 'A'), filtra per quella sede (split metrics).
+    Se i match filtrati sono insufficienti/assenti, esegue il fallback 'soft' sulle metriche generali.
     """
     if target_venue:
         matches = [m for m in matches if m.venue == target_venue]
     
     if not matches:
+        if fallback_metrics:
+            return fallback_metrics.copy()
         return {
             "pts": 0.0,
             "xg": 0.0,
@@ -132,23 +139,36 @@ def build_57_features(
     away_rest_days: float,
     home_matches_14d: float,
     away_matches_14d: float,
-    is_derby: float = 0.0
+    is_derby: float = 0.0,
+    home_matches_split: Optional[List[MatchRecord]] = None,
+    away_matches_split: Optional[List[MatchRecord]] = None
 ) -> List[float]:
     """
-    Costruisce e valida il vettore di esattamente 57 feature conformi a agent_prompt_template.md.
+    Costruisce e valida il vettore di esattamente 57 feature conformi al modello.
+    
+    Supporta sia liste match ampie (10-15 partite, da cui estrae le ultime 5 in sede),
+    sia liste split dedicate fornite esplicitamente tramite home_matches_split / away_matches_split.
     """
-    # 1. Metriche Generali e Split (Casa per Home, Trasferta per Away)
+    # 1. Metriche Generali (ultimi 5 match complessivi)
     h_gen = build_team_metrics(home_matches)
     a_gen = build_team_metrics(away_matches)
     
-    h_split = build_team_metrics(home_matches, target_venue='H')
-    a_split = build_team_metrics(away_matches, target_venue='A')
+    # 2. Metriche Split (ultimi 5 match in Casa per Home, Trasferta per Away)
+    if home_matches_split:
+        h_split = build_team_metrics(home_matches_split, fallback_metrics=h_gen)
+    else:
+        h_split = build_team_metrics(home_matches, target_venue='H', fallback_metrics=h_gen)
+        
+    if away_matches_split:
+        a_split = build_team_metrics(away_matches_split, fallback_metrics=a_gen)
+    else:
+        a_split = build_team_metrics(away_matches, target_venue='A', fallback_metrics=a_gen)
     
-    # 2. Finishing Efficiency (xG - GF)
+    # 3. Finishing Efficiency (xG - GF)
     h_xg_diff = h_gen["xg"] - h_gen["gf"]
     a_xg_diff = a_gen["xg"] - a_gen["gf"]
     
-    # 3. Protezione numerica: is_derby deve essere forzato a 0.0 per evitare divisione per 0 nello scaler
+    # 4. Protezione numerica derby: safe_is_derby forzato a 0.0 per evitare divisione per IQR=0
     safe_is_derby = 0.0
     
     features = [
