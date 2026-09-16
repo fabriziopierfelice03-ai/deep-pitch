@@ -33,7 +33,8 @@ for riga in f:
     temp.append(float(parti[4]))
     temp.append(float(parti[5]))
     for i in range(11,66):
-        temp.append(float(parti[i]))
+        if i!=49:
+            temp.append(float(parti[i]))
     Xlist.append(temp)
     for j in range(9,11):
         temp2.append(float(parti[j]))
@@ -62,7 +63,7 @@ Xtest=(Xtest-median) / (iqr+ 1e-8)
 
 emb=torch.empty(5,3)
 torch.nn.init.xavier_normal_(emb)
-w1=torch.empty(60,25)
+w1=torch.empty(59,25)
 torch.nn.init.xavier_normal_(w1)
 b1=torch.zeros(25) 
 w2=torch.empty(25,16)
@@ -137,7 +138,18 @@ with torch.no_grad():
 
     print(f"Loss: {loss.item():.4f} | MAE: {mae:.3f} | Accuratezza 1X2: {accuratezza.item():.2%}")
 
-
+# accuratezza sul TRAIN set (con la stessa pipeline usata per il test)
+with torch.no_grad():
+    emb_tr = emb[DIVtr]
+    Xtr_input = torch.cat([Xtr, emb_tr], dim=1)
+    Xtr_input = F.batch_norm(Xtr_input, running_mean=None, running_var=None, training=True)
+    h_tr = torch.tanh(Xtr_input @ w1 + b1)
+    k_tr = torch.tanh(h_tr @ w2 + b2)
+    logits_tr = k_tr @ w4 + b4
+    pred_tr = torch.argmax(logits_tr, dim=1)
+    acc_tr = (pred_tr == Ytr1x2).float().mean()
+    print(f"Accuratezza TRAIN: {acc_tr.item():.2%}")
+    print(f"Accuratezza TEST: {accuratezza.item():.2%}")
 
 checkpoint = {
     "emb": emb.detach(),
@@ -155,7 +167,6 @@ checkpoint = {
 }
 
 torch.save(checkpoint, "modello_calcio_v1.pt")
-
 
 
 

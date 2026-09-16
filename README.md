@@ -17,12 +17,12 @@ To ensure zero lookahead bias and absolute empirical validation, all value bets 
 | Metric | Recorded Value |
 | --- | --- |
 | **Starting Bankroll** | €1,000.00 |
-| **Current Bankroll** | **€978.52** |
-| **Absolute P&L** | **-€21.48** |
-| **Yield / ROI** | **-2.15%** (Bankroll) / **-2.28%** (Yield on Turnover) |
-| **Record** | 10W – 17L (37.0% Win Rate) |
-| **Pending Bets** | 15 active (2 LaLiga Midweek + 13 Weekend 1X2 Selections) |
-| **Active Portfolio Heat** | €285.60 (€41.00 Midweek + €244.60 Weekend) |
+| **Current Bankroll** | **€988.05** |
+| **Absolute P&L** | **-€11.95** |
+| **Yield / ROI** | **-1.20%** (Bankroll) / **-1.27%** (Yield on Turnover) |
+| **Record** | 11W – 18L (37.9% Win Rate) |
+| **Pending Bets** | 13 active (Weekend 1X2 Selections: 18–20 Sep 2026) |
+| **Active Portfolio Heat** | €244.60 (24.76% Bankroll) |
 | **Sample Start** | Matchday 2 |
 | **Full Audit Trail** | [`tracking_2026_2027.csv`](./tracking_2026_2027.csv) |
 

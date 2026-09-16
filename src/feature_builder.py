@@ -128,7 +128,7 @@ def build_team_metrics(
     }
 
 
-def build_57_features(
+def build_56_features(
     home_elo: float,
     away_elo: float,
     home_matches: List[MatchRecord],
@@ -144,10 +144,8 @@ def build_57_features(
     away_matches_split: Optional[List[MatchRecord]] = None
 ) -> List[float]:
     """
-    Costruisce e valida il vettore di esattamente 57 feature conformi al modello.
-    
-    Supporta sia liste match ampie (10-15 partite, da cui estrae le ultime 5 in sede),
-    sia liste split dedicate fornite esplicitamente tramite home_matches_split / away_matches_split.
+    Costruisce e valida il vettore di esattamente 56 feature conformi al modello.
+    (Esclusa la colonna ridondante del derby a varianza zero).
     """
     # 1. Metriche Generali (ultimi 5 match complessivi)
     h_gen = build_team_metrics(home_matches)
@@ -167,9 +165,6 @@ def build_57_features(
     # 3. Finishing Efficiency (xG - GF)
     h_xg_diff = h_gen["xg"] - h_gen["gf"]
     a_xg_diff = a_gen["xg"] - a_gen["gf"]
-    
-    # 4. Protezione numerica derby: safe_is_derby forzato a 0.0 per evitare divisione per IQR=0
-    safe_is_derby = 0.0
     
     features = [
         # [0, 1] Team Strength Ratings (Elo)
@@ -226,14 +221,13 @@ def build_57_features(
         float(h2h.venue_home_avg_points),
         float(h2h.venue_home_avg_goals_for),
         
-        # [36, 37, 38, 39, 40] Schedule, Fatigue & Derby
+        # [36, 37, 38, 39] Schedule & Fatigue
         float(min(home_rest_days, 14.0)),
         float(min(away_rest_days, 14.0)),
         float(home_matches_14d),
         float(away_matches_14d),
-        float(safe_is_derby),
         
-        # [41, 42, 43, 44, 45, 46] Table Pressure & Distances
+        # [40, 41, 42, 43, 44, 45] Table Pressure & Distances
         float(standings.home_dist_ucl),
         float(standings.away_dist_ucl),
         float(standings.home_dist_uel),
@@ -241,11 +235,11 @@ def build_57_features(
         float(standings.home_dist_rel),
         float(standings.away_dist_rel),
         
-        # [47, 48] Season Stage
+        # [46, 47] Season Stage
         float(standings.matchday),
         float(standings.season_half),
         
-        # [49, 50, 51, 52, 53, 54, 55, 56] In-Game Event Stats
+        # [48, 49, 50, 51, 52, 53, 54, 55] In-Game Event Stats
         float(h_gen["shots"]),
         float(a_gen["shots"]),
         float(h_gen["sot"]),
@@ -256,8 +250,11 @@ def build_57_features(
         float(a_gen["cards"]),
     ]
     
-    assert len(features) == 57, f"Errore critico: il vettore ha dimensione {len(features)}, atteso 57."
+    assert len(features) == 56, f"Errore critico: il vettore ha dimensione {len(features)}, atteso 56."
     return features
+
+# Alias per retrocompatibilità
+build_57_features = build_56_features
 
 
 def validate_feature_scaling(features: List[float], model_checkpoint_path: str = "models/modello_calcio_v1.pt") -> Dict[str, Any]:
