@@ -203,10 +203,16 @@ This distribution calculates fair odds for:
 * **Over / Under 2.5 Goals:** $1 - \sum_{i+j < 2.5} P(i, j)$
 * **Both Teams to Score (BTTS):** $\sum_{i \ge 1, j \ge 1} P(i, j)$
 
-### 3. Execution Threshold
-A bet is tagged as positive Expected Value ($\text{EV}+$) only when:
+### 3. Execution Threshold & Strategy Filters
+A market selection is tagged as an actionable Value Bet and executed in the strategy only when it satisfies all empirical criteria validated by the C++ simulation engine:
 
-$$\text{EV} = (P_{\text{model}} \times \text{Odds}_{\text{Bookmaker}}) - 1 \ge +0.05$$
+1. **Strict Edge Filter:**
+   $$\text{EV} = (P_{\text{model}} \times \text{Odds}_{\text{Bookmaker}}) - 1 > +13.0\% \quad (+0.13)$$
+2. **Odds Filtering Band:**
+   $$1.60 < \text{Odds}_{\text{Bookmaker}} < 3.10$$
+3. **Quarter-Kelly Sizing with Hard Ceiling:**
+   $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.01\right)$$
+   Every position is strictly bounded by a **1.0%** bankroll ceiling to eliminate gambler's ruin.
 
 ---
 
@@ -223,7 +229,8 @@ $$\text{EV} = (P_{\text{model}} \times \text{Odds}_{\text{Bookmaker}}) - 1 \ge +
 ├── src/
 │   ├── train_and_export.py         # Full PyTorch training routine & checkpoint exporter
 │   ├── feature_builder.py          # Deterministic feature assembly & validation engine
-│   └── predict.py                  # Standalone inference & dual pricing engine
+│   ├── predict.py                  # Standalone inference & dual pricing engine
+│   └── decision_engine.py          # Value bet qualification & Quarter-Kelly sizing engine
 ├── tests/
 │   └── test_feature_builder.py     # Deterministic feature assembly test suite
 ├── agent_prompt_template.md        # Prompt schema for Agentic AI data extraction

@@ -1,13 +1,13 @@
 # Agentic AI Pre-Match Feature Ingestion Template
 
-This document provides the standardized prompt schema used to extract and assemble the **57-feature pre-match vector** for any upcoming fixture across the top 5 European leagues (`E0`, `F1`, `SP1`, `I1`, `D1`).
+This document provides the standardized prompt schema used to extract and assemble the **56-feature pre-match vector** for any upcoming fixture across the top 5 European leagues (`E0`, `F1`, `SP1`, `I1`, `D1`).
 
 ---
 
 ## How to Use
 1. Copy the system prompt below into any AI agent equipped with live web browsing capabilities (such as Claude with Search, ChatGPT with Web Browsing, or Perplexity).
-2. Replace `[HOME_TEAM]`, `[AWAY_TEAM]`, `[LEAGUE_CODE]`, and `[FIXTURE_DATE]` with the match details.
-3. The agent will browse verified analytics hubs (e.g., FBref, Understat, Transfermarkt, official league sites) and output a verified Python list of 57 floats ready for `predict.py`.
+2. Replace `[HOME_TEAM]`, `[AWAY_TEAM]`, `[LEAGUE_CODE]`, and `[FIXTURE_DATE]` with the target match details.
+3. The agent will browse verified analytics hubs (e.g., FBref, Understat, Transfermarkt, official league sites) and output a verified Python list of **56 floats** ready for `predict.py`.
 
 ---
 
@@ -20,9 +20,9 @@ TARGET FIXTURE: [HOME_TEAM] vs [AWAY_TEAM]
 LEAGUE: [E0 = Premier League, F1 = Ligue 1, SP1 = LaLiga, I1 = Serie A, D1 = Bundesliga]
 DATE: [FIXTURE_DATE]
 
-Your task is to browse verified sports reference portals (Understat, FBref, Transfermarkt, official league standings) and calculate the exact 57 pre-match features required for the DeepPitch inference pipeline. All rolling metrics must be calculated as weighted averages across the last 5 domestic league matches prior to this fixture.
+Your task is to browse verified sports reference portals (Understat, FBref, Transfermarkt, official league standings) and calculate the exact 56 pre-match features required for the DeepPitch inference pipeline. All rolling metrics must be calculated as weighted averages across the last 5 domestic league matches prior to this fixture.
 
-### 57-Feature Exact Schema:
+### 56-Feature Exact Schema:
 1. Team Strength Ratings (Elo)
    [0] home_elo: Pre-match Elo rating of the home team.
    [1] away_elo: Pre-match Elo rating of the away team.
@@ -78,40 +78,54 @@ Your task is to browse verified sports reference portals (Understat, FBref, Tran
    [37] away_rest_days: Days of rest since last official match (capped at 14).
    [38] home_matches_last_14days: Official competitive matches played in last 14 days by home team.
    [39] away_matches_last_14days: Official competitive matches played in last 14 days by away team.
-   [40] is_derby: Binary indicator (1 if local derby or historical rival, 0 otherwise).
 
 9. League Objectives & Table Pressure
-   [41] home_dist_to_champions_league: Points distance to UCL qualification spot (4th place).
-   [42] away_dist_to_champions_league: Points distance to UCL qualification spot (4th place).
-   [43] home_dist_to_europa_league: Points distance to UEL qualification spot.
-   [44] away_dist_to_europa_league: Points distance to UEL qualification spot.
-   [45] home_dist_to_relegation_zone: Points distance to 18th place / relegation cutoff.
-   [46] away_dist_to_relegation_zone: Points distance to 18th place / relegation cutoff.
+   [40] home_dist_to_champions_league: Points distance to UCL qualification spot (4th place).
+   [41] away_dist_to_champions_league: Points distance to UCL qualification spot (4th place).
+   [42] home_dist_to_europa_league: Points distance to UEL qualification spot.
+   [43] away_dist_to_europa_league: Points distance to UEL qualification spot.
+   [44] home_dist_to_relegation_zone: Points distance to 18th place / relegation cutoff.
+   [45] away_dist_to_relegation_zone: Points distance to 18th place / relegation cutoff.
 
 10. Season Stage
-   [47] season_matchday: Current round number of the league season.
-   [48] season_half: 1 for rounds 1–19, 2 for rounds 20–38.
+   [46] season_matchday: Current round number of the league season.
+   [47] season_half: 1 for rounds 1–19, 2 for rounds 20–38.
 
 11. In-Game Match Event Stats (Weighted Average, Last 5 Matches)
-   [49] home_shots_wavg_last5: Weighted average total shots taken by home team.
-   [50] away_shots_wavg_last5: Weighted average total shots taken by away team.
-   [51] home_shots_on_target_wavg_last5: Weighted average shots on target by home team.
-   [52] away_shots_on_target_wavg_last5: Weighted average shots on target by away team.
-   [53] home_corners_wavg_last5: Weighted average corners awarded to home team.
-   [54] away_corners_wavg_last5: Weighted average corners awarded to away team.
-   [55] home_cards_wavg_last5: Weighted average cards (yellow + red) received by home team.
-   [56] away_cards_wavg_last5: Weighted average cards (yellow + red) received by away team.
+   [48] home_shots_wavg_last5: Weighted average total shots taken by home team.
+   [49] away_shots_wavg_last5: Weighted average total shots taken by away team.
+   [50] home_shots_on_target_wavg_last5: Weighted average shots on target by home team.
+   [51] away_shots_on_target_wavg_last5: Weighted average shots on target by away team.
+   [52] home_corners_wavg_last5: Weighted average corners awarded to home team.
+   [53] away_corners_wavg_last5: Weighted average corners awarded to away team.
+   [54] home_cards_wavg_last5: Weighted average cards (yellow + red) received by home team.
+   [55] away_cards_wavg_last5: Weighted average cards (yellow + red) received by away team.
 
 OUTPUT FORMAT INSTRUCTIONS:
-- You must return ONLY valid Python code containing a list of exactly 57 unscaled floating-point numbers.
-- Do NOT add markdown explanations, disclaimers, or extra text.
+- You must return ONLY valid Python code defining a list of exactly 56 unscaled floating-point numbers named `feature_56`.
+- Do NOT add markdown explanations, commentary, or extra keys.
 
 Example format:
-feature_57 = [
+feature_56 = [
     1842.1, 1715.3, 2.0, 8.0, 45.0, 31.0, 2.1, 1.3, 2.4, 1.0,
     1.65, 1.12, 1.80, 0.95, 0.90, 1.45, 0.85, 1.60, 1.80, 1.20,
     2.20, 1.00, 0.80, 1.40, 0.60, 1.60, 0.15, -0.08, 1.8, 1.0,
-    1.6, 1.0, 1.55, 1.10, 2.0, 1.8, 6.0, 3.0, 2.0, 4.0, 0.0,
+    1.6, 1.0, 1.55, 1.10, 2.0, 1.8, 6.0, 3.0, 2.0, 4.0,
     12.0, -2.0, 18.0, 4.0, 32.0, 18.0, 22.0, 2.0, 14.2, 11.8,
     5.4, 3.8, 6.2, 4.5, 1.8, 2.4
 ]
+```
+
+---
+
+## Strategic Bet Qualification Criteria
+
+Once `predict.py` generates model probabilities, selections are evaluated against the strategy's quantitative filters:
+
+1. **Expected Value Threshold:**
+   $$\text{EV} = (P_{\text{model}} \times \text{Odds}_{\text{Bookmaker}}) - 1 > +13.0\% \quad (+0.13)$$
+2. **Odds Filtering Range:**
+   $$1.60 < \text{Odds}_{\text{Bookmaker}} < 3.10$$
+3. **Position Sizing (Quarter Kelly Criterion):**
+   $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.01\right)$$
+   * Individual stake is capped at **1.0%** of current bankroll.
