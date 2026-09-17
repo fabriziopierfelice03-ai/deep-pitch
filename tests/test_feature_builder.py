@@ -4,7 +4,7 @@ sys.path.insert(0, r"c:\Users\fabri\Desktop\deep-pitch")
 
 from src.feature_builder import (
     MatchRecord, H2HRecord, StandingsContext,
-    build_57_features, validate_feature_scaling
+    build_56_features, build_57_features, validate_feature_scaling
 )
 from src.predict import predici_partita
 
@@ -83,8 +83,8 @@ class TestFeatureBuilder(unittest.TestCase):
             season_half=1.0
         )
 
-        # 5. Build 57-feature vector
-        feat_57 = build_57_features(
+        # 5. Build 56-feature vector
+        feat_56 = build_56_features(
             home_elo=1785.0,
             away_elo=1820.0,
             home_matches=lazio_matches,
@@ -97,17 +97,17 @@ class TestFeatureBuilder(unittest.TestCase):
             away_matches_14d=2.0
         )
 
-        self.assertEqual(len(feat_57), 57)
-        self.assertFalse(any(v is None for v in feat_57))
+        self.assertEqual(len(feat_56), 56)
+        self.assertFalse(any(v is None for v in feat_56))
 
         # 6. Test scaling
-        scaling = validate_feature_scaling(feat_57)
+        scaling = validate_feature_scaling(feat_56)
         self.assertTrue(scaling["is_sane"], f"Scaling anomaly: min={scaling['min_scaled']}, max={scaling['max_scaled']}")
         self.assertLess(scaling["max_scaled"], 3.0)
         self.assertGreater(scaling["min_scaled"], -3.0)
 
         # 7. Test prediction call
-        res = predici_partita("I1", feat_57)
+        res = predici_partita("I1", feat_56)
         self.assertIn("Rete_Softmax_1X2", res)
         self.assertIn("Poisson_Stats", res)
         print("\nTest passed successfully! Model output:")

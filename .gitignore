@@ -4,3 +4,7 @@ __pycache__/
 venv/
 env/
 matches_enriched_xg_top5_2014_2026.csv
+*.exe
+*.o
+*.obj
+downloaded_files/
