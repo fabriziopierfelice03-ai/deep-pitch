@@ -125,17 +125,31 @@ def scrape_live_clubelo() -> Dict[str, float]:
             
     return ratings
 
+_ELO_CACHE_MEM: Optional[Dict[str, float]] = None
+
 def load_live_elo_database(force_refresh: bool = False) -> Dict[str, float]:
+    global _ELO_CACHE_MEM
+    if not force_refresh and _ELO_CACHE_MEM is not None:
+        return _ELO_CACHE_MEM
     if not force_refresh and is_cache_valid():
         try:
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                return data.get("ratings", {})
+                _ELO_CACHE_MEM = data.get("ratings", {})
+                return _ELO_CACHE_MEM
         except Exception:
             pass
             
-    return scrape_live_clubelo()
-
+    res = scrape_live_clubelo()
+    if not res and os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                res = data.get("ratings", {})
+        except Exception:
+            pass
+    _ELO_CACHE_MEM = res
+    return _ELO_CACHE_MEM
 def get_live_elo(team_name: str, fallback: float = 1650.0) -> float:
     ratings = load_live_elo_database()
     k = clean_key(team_name)

@@ -95,8 +95,8 @@ To ensure zero lookahead bias and absolute empirical validation, all value bets 
 | **Absolute P&L** | **-€11.95** |
 | **Yield / ROI** | **-1.20%** (Bankroll) / **-1.27%** (Yield on Turnover) |
 | **Record** | 11W – 18L (37.9% Win Rate) |
-| **Pending Bets** | 13 active (Weekend 1X2 Selections: 18–20 Sep 2026) |
-| **Active Portfolio Heat** | €244.60 (24.76% Bankroll) |
+| **Pending Bets** | 9 active (Weekend 1X2 Selections: 18–20 Sep 2026) |
+| **Active Portfolio Heat** | €88.92 (9.00% Bankroll) |
 | **Sample Start** | Matchday 2 |
 | **Full Audit Trail** | [`tracking_2026_2027.csv`](./tracking_2026_2027.csv) |
 
