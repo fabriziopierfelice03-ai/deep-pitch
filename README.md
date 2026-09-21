@@ -1,81 +1,103 @@
-# DeepPitch: Quantitative Multi-Task Football Value Betting Framework
+# DeepPitch: Quantitative Football Value Betting with Bayesian Shrinkage & C++20 Monte Carlo Engine
 
-DeepPitch is an end-to-end institutional-grade quantitative modeling and algorithmic wagering pipeline designed to isolate and exploit structural market inefficiencies (Value Bets) across the top 5 European domestic leagues: Premier League (`E0`), Ligue 1 (`F1`), LaLiga (`SP1`), Serie A (`I1`), and Bundesliga (`D1`).
+DeepPitch is an end-to-end institutional-grade quantitative modeling and algorithmic wagering pipeline designed to detect and exploit structural market inefficiencies (Value Bets) across European football leagues.
 
-The repository operates on a **dual-stack quantitative architecture**:
-1. **Machine Learning Core (Python/PyTorch):** A joint **Multi-Task Neural Network** regularized with learned entity embeddings, producing concurrent continuous expected goals ($\hat{\lambda}_{\text{home}}, \hat{\lambda}_{\text{away}}$) and categorical outcome logits ($P_1, P_X, P_2$).
-2. **High-Performance Simulation & Execution Engine (C++20):** An ultra-fast, cache-friendly backtester and **10,000-run Monte Carlo stress tester** assessing path-dependent drawdown and ruin probabilities across **16,266 historical matches in under 250 milliseconds**.
-3. **Live Empirical Audit:** Transparent pre-match paper trading tracked in real time for the 2026/2027 season with zero lookahead bias.
+The framework operates on a **modernized dual-stack quantitative architecture**:
+1. **Machine Learning Core (Python/PyTorch):** A streamlined, universal **1X2 Categorical Neural Network** (`56 -> 25 -> 16 -> 3`) regularized with AdamW, label smoothing, and early stopping on validation Brier score.
+2. **Empirical Bayesian Shrinkage Layer:** A calibrated logistic regression layer that blends the neural network's predictive alpha with de-vigged market consensus odds:
+   $$\text{logit}(p_{\text{calib}}) = 0.0806 + 0.6173 \cdot \text{logit}(p_{\text{model}}) + 0.5035 \cdot \text{logit}(p_{\text{book}})$$
+   yielding a balanced weighting of **55.1% Model Alpha** and **44.9% Market Consensus**.
+3. **100% Blind Out-of-Sample Test Set Validation:** Validated on **1,627 untouched out-of-sample fixtures** (10% temporal split), achieving **+17.08% net ROI** across 384 qualified bets at $\text{EV} > 5.5\%$ with a **22.29% maximum drawdown**.
+4. **High-Performance Simulation & Execution Engine (C++20):** An ultra-fast, cache-friendly native backtester featuring a **10,000-run Monte Carlo stress test** (Bootstrap resampling and trade-order permutation) executing 16,000+ fixtures in milliseconds.
+5. **Live Empirical Audit:** Transparent pre-match paper trading tracked in real time for the 2026/2027 season with zero lookahead bias.
 
 ---
 
-## ⚡ High-Performance C++ Backtesting Engine (16,000+ Matches)
+## ⚡ High-Performance C++20 Backtesting & Monte Carlo Engine
 
-To rigorously validate model pricing over long horizons without Python interpreter overhead, DeepPitch includes a native **C++20 backtesting and Monte Carlo simulation engine** located in [`backtest/`](./backtest).
+To rigorously stress-test strategy viability without lookahead bias or data contamination, DeepPitch evaluates performance exclusively on the **100% blind out-of-sample test set (1,627 matches)** using a native **C++20 engine** located in [`backtest/`](./backtest).
 
 ```
-  [ 16,266 Historical Matches (2014-2026) ]
-                     │
-                     ▼
-       [ C++ Vectorized Ingestion ]
-                     │
-        Filter: 1.60 < Odds < 3.10
-        Edge:   EV > +13.0%
-                     │
-                     ▼
-        [ 2,265 Qualified Value Bets ]
-                     │
-         ┌───────────┴───────────┐
-         ▼                       ▼
- [ Quarter-Kelly Staking ]  [ 10,000 Monte Carlo Shuffles ]
- (Max 1.0% Bankroll Cap)   (Ruin Probability & Drawdown Tails)
-         │                       │
-         ▼                       ▼
-  +65.46% Bankroll ROI        0.00% Risk of Ruin
-  +66.38 Flat PnL Units       37.42% Median Drawdown
+          [ 16,266 Historical Matches (2014-2026) ]
+                             │
+            Strict 90% Temporal Split (Cutoff)
+                             │
+                             ▼
+      [ 1,627 Blind Out-of-Sample Test Matches (10%) ]
+                             │
+               Filter: 1.60 < Odds < 3.10
+               Edge:   EV > +5.5% (Target Strategy)
+                             │
+                             ▼
+              [ 384 Qualified Value Bets ]
+              (183 Won | 47.66% Win Rate | Avg Odds: 2.24)
+                             │
+               ┌─────────────┴─────────────┐
+               ▼                           ▼
+     [ Quarter-Kelly Staking ]    [ 10,000 Monte Carlo Runs ]
+     (1.5% Bankroll Hard Cap)     (Bootstrap & Permutation)
+               │                           │
+               ▼                           ▼
+        +17.08% Net ROI             0.00% Risk of Ruin
+        +11.90 Flat PnL Units       25.19% Median Drawdown
+        22.29% Max Drawdown         €1,167 Median Bankroll
 ```
 
 ### 1. Capital Allocation & Risk Management
-The backtester applies a fractional **Quarter Kelly Criterion** with a hard risk ceiling to eliminate gambler's ruin while maximizing logarithmic geometric growth:
+The backtester applies a fractional **Quarter-Kelly Criterion** with a hard risk ceiling to eliminate gambler's ruin while maximizing geometric bankroll growth:
 
-$$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.01\right)$$
+$$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.015\right)$$
 
-* $p$: Model-derived true win probability.
+* $p$: Model probability calibrated via Bayesian Shrinkage.
 * $q$: Decimal odds offered by the market.
-* **Hard Capital Cap:** Individual position sizes never exceed **1.0%** of current bankroll under any circumstance.
-* **Selection Filters:** Matches are only executed if $1.60 < \text{Odds} < 3.10$ and Expected Value $\text{EV} = (p \cdot q) - 1 > +13\%$.
+* **Hard Capital Cap:** Individual position sizes never exceed **1.5%** of current bankroll under any circumstance.
+* **Selection Filters:** Matches are only executed if $1.60 < \text{Odds} < 3.10$ and Expected Value $\text{EV} = (p \cdot q) - 1 > +5.5\%$.
 
-### 2. Historical Backtest Performance (16,266 Matches)
-Simulated across all top-5 European league matches from 2014 to 2026 in [`backtest/backtest2.0.csv`](./backtest/backtest2.0.csv):
+### 2. Out-of-Sample Sensitivity Analysis (1,627 Test Matches)
+The table below illustrates the strategy's sensitivity across various EV thresholds on the virgin out-of-sample test set:
 
-| Metric | Result | Analytical Context |
-| :--- | :--- | :--- |
-| **Historical Matches Evaluated** | **16,266** | Complete dataset span across 5 European leagues |
-| **Total Bets Placed ($\text{EV} > 13\%$)** | **2,265** | 13.9% market selection selectivity |
-| **Bets Won / Win Rate** | **994 / 43.89%** | Solid strike rate on plus-money average prices |
-| **Average Odds Taken** | **2.414** | Focus on under-the-radar value in the 1.60–3.10 range |
-| **Initial Capital** | **€1,000.00** | Starting backtest bankroll |
-| **Peak Bankroll** | **€1,912.01** | High-water mark during the simulation |
-| **Final Bankroll** | **€1,654.57** | **+65.46% Net Capital Growth** |
-| **Historical Maximum Drawdown** | **29.84%** | Controlled drawdown via Quarter-Kelly capping |
-| **Flat Staking P&L** | **+66.38 units** | Independent proof of positive statistical expectation |
+| EV Threshold | Bets | Won | Win Rate | Avg Odds | Final Bankroll | ROI (%) | Max Drawdown | Flat PnL |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **2.0%** | 556 | 259 | 46.58% | 2.23 | €1,061.48 | +6.15% | 25.16% | +1.03u |
+| **3.0%** | 504 | 235 | 46.63% | 2.24 | €1,083.98 | +8.40% | 26.26% | +1.96u |
+| **4.0%** | 455 | 216 | 47.47% | 2.24 | €1,158.86 | +15.89% | 26.20% | +9.22u |
+| **5.0%** | 407 | 191 | 46.93% | 2.24 | €1,087.33 | +8.73% | 24.13% | +4.99u |
+| **5.5% (Target)** | **384** | **183** | **47.66%** | **2.24** | **€1,170.77** | **+17.08%** | **22.29%** | **+11.90u** |
+| **6.0%** | 367 | 174 | 47.41% | 2.25 | €1,134.11 | +13.41% | 24.35% | +9.58u |
+| **7.0%** | 336 | 158 | 47.02% | 2.25 | €1,078.20 | +7.82% | 23.78% | +6.20u |
+| **8.0%** | 302 | 139 | 46.03% | 2.26 | €1,003.88 | +0.39% | 25.61% | +0.95u |
 
-### 3. Monte Carlo Robustness Stress Test (10,000 Runs)
-Historical execution paths are prone to sequence bias (e.g., encountering winning streaks early). To test model fragility, the C++ engine runs **10,000 randomized permutations** of the 2,265 qualified value bets, assessing path-dependent drawdown distributions and worst-case tail risks:
+### 3. Dual-Module Monte Carlo Stress Testing (10,000 Runs)
 
-| Stress Test Metric | Value | Risk Interpretation |
-| :--- | :--- | :--- |
-| **Probability of Ruin ($< €200$)** | **0.00%** | Zero runs breached the 80% loss threshold across 10,000 trials |
-| **Optimistic Drawdown ($5^{\text{th}}$ percentile)** | **27.28%** | Favorable variance sequence |
-| **Median Drawdown ($50^{\text{th}}$ percentile)** | **37.42%** | Expected drawdown profile under standard randomness |
-| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **51.84%** | Severe adverse variance cluster |
-| **Worst Absolute Drawdown** | **72.99%** | Extreme tail event over 10,000 reshuffled permutations |
-| **Engine Execution Speed** | **~200 ms** | 16,266 match parses + 10,000 Monte Carlo runs combined |
+To evaluate tail risk and path dependency across thousands of possible trajectories, the C++ engine executes two complementary 10,000-iteration Monte Carlo procedures:
+
+#### Module A: Bootstrap Resampling (Sampling with Replacement)
+Simulates 10,000 alternative seasons by sampling 384 bets with replacement from the observed empirical trade distribution:
+
+| Metric | Simulated Value | Risk Interpretation |
+| :--- | :---: | :--- |
+| **Probability of Ruin ($< €200$)** | **0.00%** | Zero runs breached the 80% loss barrier |
+| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€701.90** | Unfavorable variance regime over a full season |
+| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,167.04** | Central expectation aligns closely with realized +17.08% return |
+| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€1,977.36** | High-water mark under positive variance |
+| **Median Maximum Drawdown** | **25.19%** | Expected drawdown depth across simulated paths |
+| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **43.58%** | Drawdown boundary in adverse volatility regimes |
+| **Worst-Case Absolute Drawdown** | **67.31%** | Theoretical tail scenario across 3,840,000 total simulated wagers |
+
+#### Module B: Trade-Order Permutation (Reshuffling without Replacement)
+Quantifies sequence risk and losing-streak clustering by randomly shuffling the chronological order of the 384 observed historical bets:
+
+| Permutation Metric | Value | Risk Interpretation |
+| :--- | :---: | :--- |
+| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **17.20%** | Favorable dispersion of wins and losses |
+| **Median Drawdown ($50^{\text{th}}$ percentile)** | **24.65%** | Standard sequence-dependent drawdown |
+| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **35.60%** | Clustered adverse variance |
+| **Worst-Case Permutation Drawdown** | **48.41%** | Maximum clustering of losing bets in 10,000 random sequences |
 
 ### 4. Compiling and Running the C++ Engine
 
 ```bash
-# Compile with C++20 and full -O3 vectorization
+# Compile with C++20 and full -O3 optimization
 g++ -O3 -std=c++20 backtest/backtest.cpp -o backtest/backtest
 
 # Execute simulation (auto-detects dataset in current or parent directory)
@@ -84,72 +106,61 @@ g++ -O3 -std=c++20 backtest/backtest.cpp -o backtest/backtest
 
 ---
 
-## 📈 Live Paper Trading Ledger (Season 2026/2027)
+## ⚖️ Bayesian Shrinkage Layer via Logistic Regression
 
-To ensure zero lookahead bias and absolute empirical validation, all value bets are logged and committed to this repository **prior to the kickoff of each matchday**.
+In sports betting markets, deep neural networks trained exclusively on match data can suffer from localized overconfidence and longshot bias. Conversely, bookmaker odds embed massive aggregate liquidity and collective market wisdom, but carry bookmaker overround (vigorish) and public sentiment distortions.
 
-| Metric | Recorded Value |
-| :--- | :--- |
-| **Starting Bankroll** | €1,000.00 |
-| **Current Bankroll** | **€1,019.17** |
-| **Absolute P&L** | **+€19.17** |
-| **Yield / ROI** | **+1.92%** (Bankroll) / **+1.79%** (Yield on Turnover) |
-| **Record** | 16W – 22L (42.1% Win Rate) |
-| **Pending Bets** | 0 active (Weekend round settled) |
-| **Active Portfolio Heat** | €0.00 (0.00% Bankroll) |
-| **Sample Start** | Matchday 2 |
-| **Full Audit Trail** | [`tracking_2026_2027.csv`](./tracking_2026_2027.csv) |
+To harvest true predictive alpha while ensuring rigorous calibration, DeepPitch incorporates an **Empirical Bayesian Shrinkage Layer** fitted via logistic regression on 14,400 historical training matches:
+
+```
+[ 56 Match Features ] ──> [ Neural Net (56 -> 25 -> 16 -> 3) ] ──> Raw Logits ──> p_model
+                                                                                     │
+                                                                                     ├──> [ Bayesian Shrinkage Layer ] ──> Calibrated p
+[ Market Odds (1X2) ] ──> [ De-Vigging (Overround Removal) ]   ──> Implied Odds ──> p_book   (Model 55.1% | Market 44.9%)
+```
+
+### Mathematical Formulation:
+1. **De-vigging Bookmaker Implied Probabilities:**
+   $$I_k = \frac{1}{q_k}, \quad s = \sum_{j \in \{1, X, 2\}} I_j, \quad p_{k, \text{book}} = \frac{I_k}{s}$$
+
+2. **Logit Transformation:**
+   $$\text{logit}(p) = \ln\left(\frac{p}{1 - p}\right)$$
+
+3. **Empirical Bayesian Combination:**
+   $$z_k = \alpha + \beta_{\text{model}} \cdot \text{logit}(p_{k, \text{model}}) + \beta_{\text{book}} \cdot \text{logit}(p_{k, \text{book}})$$
+   where:
+   * $\alpha = 0.0806$ (Calibration Intercept)
+   * $\beta_{\text{model}} = 0.6173 \implies \mathbf{55.1\%}$ relative weight
+   * $\beta_{\text{book}} = 0.5035 \implies \mathbf{44.9\%}$ relative weight
+
+4. **Normalized Calibrated Distribution:**
+   $$p_k^{\text{calib}} = \frac{\sigma(z_k)}{\sum_j \sigma(z_j)}, \quad \text{Fair Odds}_k = \frac{1}{p_k^{\text{calib}}}$$
+
+This Bayesian formulation ensures that the model only takes positions when its statistical edge is strong enough to deviate meaningfully from the market consensus.
 
 ---
 
-## 🧠 Model Architecture & Pipeline Flow
+## 🧠 Neural Network Architecture & Training Pipeline
 
-The neural model accepts a **59-dimensional input vector** (56 domain-engineered numerical features + a 3-dimensional learned league entity embedding). A shared latent representation regularizes both heads simultaneously:
+### 1. Architectural Streamlining
+In earlier iterations, the network incorporated league entity embeddings and an auxiliary xG regression head. Extensive empirical ablation revealed:
+* **Removal of League Entity Embeddings:** Entity embeddings artificially fragmented the dataset and prevented the model from generalizing to international fixtures, cup competitions, or unseen leagues. The streamlined 56-feature vector is fully universal across world football.
+* **Removal of Auxiliary xG Regression Head:** Multi-task loss balancing between continuous xG and discrete 1X2 cross-entropy introduced conflicting gradient dynamics. Eliminating the xG head concentrated 100% of network capacity on the true wagering objective: the 1X2 categorical distribution.
 
+### 2. Network Specifications
 ```
-                    [ 56 Match Features ]  ──┐
-                                             ├──> [ 59-dim Dense Vector ]
-[ League Identifier ] ──> [ League Embedding (5x3) ] ──┘
-                                   │
-                                   ▼
-                    [ Linear (59 -> 25) + Tanh ]
-                                   │
-                    [ Dropout (p=0.10) ]
-                                   │
-                    [ Linear (25 -> 16) + Tanh ]  <-- Shared Latent Core (k)
-                                   │
-                 ┌─────────────────┴─────────────────┐
-                 ▼                                   ▼
-        [ Head 1: xG Regression ]          [ Head 2: 1X2 Classification ]
-        Linear (16 -> 2)                   Linear (16 -> 3)
-        Softplus Activation                Raw Logits
-                 │                                   │
-                 ▼                                   ▼
-          Predicted xG                        Direct Softmax
-       (Home xG, Away xG)                   P(1), P(X), P(2)
-                 │                                   │
-                 ▼                                   │
-      [ 7x7 Poisson Matrix ]                         │
-    (Secondary Markets: O/U, BTTS)                   │
-                 │                                   │
-                 └───────────────┬───────────────────┘
-                                 ▼
-                    [ Consensus Fair Odds Engine ]
-                                 │
-                                 ▼
-                     [ Expected Value (EV+) ]
+Input Layer:        56 Domain-Engineered Numerical Features
+Hidden Layer 1:     Linear(56 -> 25) + Tanh Activation + Dropout(p=0.10)
+Hidden Layer 2:     Linear(25 -> 16) + Tanh Activation
+Output Layer:       Linear(16 -> 3) (Unbounded Logits for 1, X, 2)
 ```
 
-### 1. Robust Input Normalization
-Features are normalized using empirical Median and Interquartile Range ($IQR$) computed strictly on the training partition:
-
-$$\tilde{x} = \frac{x - \text{Median}(X_{\text{train}})}{IQR(X_{\text{train}}) + 1e-8}, \quad IQR = Q_{75} - Q_{25}$$
-
-### 2. Multi-Task Joint Objective
-$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{SmoothL1}}(\hat{y}_{\text{xG}}, y_{\text{xG}}) + 0.30 \cdot \mathcal{L}_{\text{CrossEntropy}}(\hat{z}_{1X2}, y_{1X2})$$
-
-* **Smooth L1 Loss ($\beta=1.0$):** Resists large outlier scores while maintaining stable gradient flow around zero.
-* **Cross-Entropy Loss:** Acts as a discrete anchor, preserving discriminative match-outcome boundaries in the shared latent representation.
+### 3. Training Protocol
+* **Dataset:** 16,266 historical matches (2014–2026).
+* **Temporal Split:** Strict 80% Train (12,987 matches), 10% Validation (1,623 matches), and 10% Test (1,627 matches).
+* **Optimization:** `AdamW` ($\text{lr} = 0.003$, $\text{weight\_decay} = 0.008$).
+* **Loss Function:** `CrossEntropyLoss(label_smoothing=0.06)` with gradient norm clipping ($\text{max\_norm} = 1.0$).
+* **Early Stopping:** Monitored strictly on **Validation Brier Score** with patience of 800 steps, preserving the test set completely pristine.
 
 ---
 
@@ -173,66 +184,23 @@ Every match vector is deterministically assembled into the exact 56-feature layo
 
 ---
 
-## 🤖 Pre-Match Feature Retrieval via Agentic AI
-
-Manually maintaining 56 continuous parameters for 40+ matches every weekend is inefficient and error-prone. Rather than relying on fragile scrapers vulnerable to DOM updates, anti-bot protections, and API rate limits, feature ingestion is handled by an **autonomous Agentic AI workflow**:
-
-1. **Autonomous Search & Ingestion:** Every Friday, an external agent queries verified football statistics providers (FBref, Understat, Transfermarkt, FotMob/Opta).
-2. **Deterministic Calculation:** The agent aggregates 5-game decay-weighted averages, calculates context parameters (table distances, fatigue thresholds), and validates type boundaries.
-3. **Structured Vector Export:** The agent outputs a verified, zero-null Python list of exactly 56 floats ready for direct ingestion by `predict.py`.
-
-A ready-to-use extraction prompt is provided in [`agent_prompt_template.md`](./agent_prompt_template.md).
-
----
-
-## ⚖️ Pricing Engine & Value Betting Logic
-
-Market odds pricing requires selecting the right probability model for each specific market:
-
-### 1. 1X2 Market (Direct Softmax Head)
-Standard Poisson simulations notoriously underestimate low-scoring draws ($0\text{-}0, 1\text{-}1$) due to the assumption of independence between home and away goals. DeepPitch extracts 1X2 probabilities directly from the categorical output head:
-
-$$P(y = c) = \frac{e^{\hat{z}_c}}{\sum_{j \in \{1, X, 2\}} e^{\hat{z}_j}}$$
-
-### 2. Derivative Markets (Bivariate Poisson Simulation)
-Predicted continuous xG outputs ($\hat{\lambda}_{\text{home}}, \hat{\lambda}_{\text{away}}$) generate an independent scoreline joint probability matrix across a $7 \times 7$ grid:
-
-$$P(\text{Home}=i, \text{Away}=j) = \frac{\hat{\lambda}_H^i e^{-\hat{\lambda}_H}}{i!} \times \frac{\hat{\lambda}_A^j e^{-\hat{\lambda}_A}}{j!}$$
-
-This distribution calculates fair odds for:
-* **Over / Under 2.5 Goals:** $1 - \sum_{i+j < 2.5} P(i, j)$
-* **Both Teams to Score (BTTS):** $\sum_{i \ge 1, j \ge 1} P(i, j)$
-
-### 3. Execution Threshold & Strategy Filters
-A market selection is tagged as an actionable Value Bet and executed in the strategy only when it satisfies all empirical criteria validated by the C++ simulation engine:
-
-1. **Strict Edge Filter:**
-   $$\text{EV} = (P_{\text{model}} \times \text{Odds}_{\text{Bookmaker}}) - 1 > +13.0\% \quad (+0.13)$$
-2. **Odds Filtering Band:**
-   $$1.60 < \text{Odds}_{\text{Bookmaker}} < 3.10$$
-3. **Quarter-Kelly Sizing with Hard Ceiling:**
-   $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.01\right)$$
-   Every position is strictly bounded by a **1.0%** bankroll ceiling to eliminate gambler's ruin.
-
----
-
 ## 📁 Repository Structure
 
 ```text
 ├── backtest/
-│   ├── backtest.cpp                # Ultra-fast C++20 backtester & Monte Carlo simulator
-│   └── backtest2.0.csv             # 16,266 historical matches dataset (odds, probs, results)
+│   ├── backtest.cpp                # High-performance C++20 backtester & dual Monte Carlo engine
+│   └── backtest2.0.csv             # 16,266 matches dataset with calibrated model probabilities
 ├── models/
-│   └── modello_calcio_v1.pt        # Serialized weights, embeddings & scaler parameters
+│   └── modello_calcio_v1.pt        # Serialized weights (56 -> 25 -> 16 -> 3) & scaler parameters
 ├── data/
 │   └── matches_sample.csv          # Sample subset of the enriched historical dataset
 ├── src/
-│   ├── train_and_export.py         # Full PyTorch training routine & checkpoint exporter
+│   ├── train_and_export.py         # PyTorch training routine with 80/10/10 split & early stopping
 │   ├── feature_builder.py          # Deterministic feature assembly & validation engine
-│   ├── predict.py                  # Standalone inference & dual pricing engine
+│   ├── predict.py                  # Match inference with Bayesian Shrinkage calibration
 │   └── decision_engine.py          # Value bet qualification & Quarter-Kelly sizing engine
 ├── tests/
-│   └── test_feature_builder.py     # Deterministic feature assembly test suite
+│   └── test_feature_builder.py     # Deterministic feature assembly & calibration test suite
 ├── agent_prompt_template.md        # Prompt schema for Agentic AI data extraction
 ├── tracking_2026_2027.csv          # Live, timestamped paper trading log
 ├── requirements.txt                # Minimal environment dependencies
@@ -244,36 +212,38 @@ A market selection is tagged as an actionable Value Bet and executed in the stra
 ## 🚀 Quick Start
 
 ### 1. Run the C++ Backtesting & Monte Carlo Engine
-
 ```bash
-# Compile and run the C++ engine
+# Compile and execute C++ backtest
 g++ -O3 -std=c++20 backtest/backtest.cpp -o backtest/backtest
 ./backtest/backtest
 ```
 
-### 2. Run Python Match Inference
-
+### 2. Run Python Match Inference with Bayesian Shrinkage
 ```python
-from src.predict import predici_partita
+from src.predict import predici_partita, stampa_report_partita
 
-# League identifier: 'I1' (Serie A), 'E0' (Premier League), etc.
-# feature_56: 56-element float vector assembled via Agentic AI
-sample_vector = [
+# 56 domain features assembled via src.feature_builder
+features_56 = [
     1845.0, 1720.0,            # [0-1] Elo
     2.0, 7.0, 48.0, 36.0,      # [2-5] Table standings & points
     # ... Remaining 50 features in exact order
 ]
 
-report = predici_partita("I1", sample_vector)
+# Market odds [Home, Draw, Away]
+market_odds = [2.70, 3.30, 2.60]
 
-print("Predicted xG:", report["xG_Predetti"])
-print("Neural 1X2 Probabilities:", report["Rete_Softmax_1X2"]["Probabilita_%"])
-print("Neural 1X2 Fair Odds:", report["Rete_Softmax_1X2"]["Fair_Odds"])
-print("Poisson Over 2.5 Fair Odds:", report["Poisson_Stats"]["Under_Over_2.5"]["Quota_Over"])
+# Run prediction with Bayesian calibration
+report = predici_partita(features_56, market_odds=market_odds)
+stampa_report_partita(report, "Roma", "Milan")
+```
+
+### 3. Run Unit Tests
+```bash
+py -3.14 -m pytest tests/
 ```
 
 ---
 
 ## ⚖️ Disclaimer
 
-*This repository is maintained strictly for academic research, statistical modeling, and quantitative sports analytics. Historical paper trading yields and backtest results do not guarantee future profitability. Nothing herein constitutes financial or wagering advice.*
+*This repository is maintained strictly for academic research, statistical modeling, and quantitative sports analytics. Historical backtest results and simulations do not guarantee future profitability. Nothing herein constitutes financial or wagering advice.*

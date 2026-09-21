@@ -106,13 +106,20 @@ class TestFeatureBuilder(unittest.TestCase):
         self.assertLess(scaling["max_scaled"], 3.0)
         self.assertGreater(scaling["min_scaled"], -3.0)
 
-        # 7. Test prediction call
-        res = predici_partita("I1", feat_56)
+        # 7. Test prediction call (Raw Softmax & Bayesian Shrinkage)
+        market_odds = [2.70, 3.30, 2.60]
+        res = predici_partita("I1", feat_56, market_odds=market_odds)
         self.assertIn("Rete_Softmax_1X2", res)
-        self.assertIn("Poisson_Stats", res)
+        self.assertIn("Bayesian_Shrinkage_1X2", res)
+        
+        # Verify Bayesian Shrinkage probabilities sum to 100%
+        bayes_probs = res["Bayesian_Shrinkage_1X2"]["Probabilita_%"]
+        total_p = bayes_probs["1"] + bayes_probs["X"] + bayes_probs["2"]
+        self.assertAlmostEqual(total_p, 100.0, delta=0.5)
+
         print("\nTest passed successfully! Model output:")
-        print("xG Predetti:", res["xG_Predetti"])
         print("Softmax 1X2 Prob:", res["Rete_Softmax_1X2"]["Probabilita_%"])
+        print("Bayesian Shrinkage Prob:", res["Bayesian_Shrinkage_1X2"]["Probabilita_%"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,183 +1,162 @@
+import random
+import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-f=open("matches_enriched_xg_top5_2014_2026.csv", "r")
 
-Xlist=[]
-Ylist=[]
-Ylist1x2=[]
-f.readline()
-#27-39
-#23-25
-embList=[]
-campionati={
-    "E0": 0,
-    "F1": 1,    
-    "SP1": 2,
-    "I1": 3,
-    "D1": 4
+SEED = 42
+torch.manual_seed(SEED)
+np.random.seed(SEED)
+random.seed(SEED)
 
-}
-risultati={
-    "1":0,
-    "X":1,
-    "2":2
-}
+risultati = {"1": 0, "X": 1, "2": 2}
+Xlist = []
+Ylist1x2 = []
 
+with open("matches_enriched_xg_top5_2014_2026.csv", "r") as f:
+    next(f)
+    for riga in f:
+        parti = riga.strip().split(",")
+        temp = [float(parti[4]), float(parti[5])]
+        for i in range(11, 66):
+            if i != 49:
+                temp.append(float(parti[i]))
+        Xlist.append(temp)
+        Ylist1x2.append(risultati[parti[8]])
 
+N_FEATURES = len(Xlist[0])
 
-for riga in f:
-    temp=[]
-    temp2=[]
-    parti=riga.split(',')
-    embList.append(campionati[parti[0]])
-    temp.append(float(parti[4]))
-    temp.append(float(parti[5]))
-    for i in range(11,66):
-        if i!=49:
-            temp.append(float(parti[i]))
-    Xlist.append(temp)
-    for j in range(9,11):
-        temp2.append(float(parti[j]))
-    Ylist.append(temp2)
-    Ylist1x2.append(risultati[parti[8]])
+# Split temporale a 3 vie: 80% Train, 10% Validation, 10% Test
+split_train = int(0.80 * len(Xlist))
+split_val = int(0.90 * len(Xlist))
 
+Xtr_raw = torch.tensor(Xlist[:split_train], dtype=torch.float32)
+Ytr1x2 = torch.tensor(Ylist1x2[:split_train], dtype=torch.long)
 
+Xval_raw = torch.tensor(Xlist[split_train:split_val], dtype=torch.float32)
+Yval1x2 = torch.tensor(Ylist1x2[split_train:split_val], dtype=torch.long)
 
-epoche=10001
-lunghadd=int(0.9*(len(Xlist)))
-DIVtr = torch.tensor(embList[0:lunghadd], dtype=torch.long)
-DIVtest = torch.tensor(embList[lunghadd:], dtype=torch.long)
-Xtr=torch.tensor(Xlist[0:lunghadd], dtype=torch.float32)
-Ytr=torch.tensor(Ylist[0:lunghadd], dtype=torch.float32)
-Ytr1x2=torch.tensor(Ylist1x2[0:lunghadd], dtype=torch.long)
-Xtest=torch.tensor(Xlist[lunghadd:], dtype=torch.float32)
-Ytest=torch.tensor(Ylist[lunghadd:], dtype=torch.float32)
-Ytest1x2=torch.tensor(Ylist1x2[lunghadd:], dtype=torch.long)
-q25 = torch.quantile(Xtr, 0.25, dim=0)
-q75 = torch.quantile(Xtr, 0.75, dim=0)
+Xtest_raw = torch.tensor(Xlist[split_val:], dtype=torch.float32)
+Ytest1x2 = torch.tensor(Ylist1x2[split_val:], dtype=torch.long)
+
+# Scaler calcolato esclusivamente sul Train Set
+median = torch.median(Xtr_raw, dim=0).values
+q25 = torch.quantile(Xtr_raw, 0.25, dim=0)
+q75 = torch.quantile(Xtr_raw, 0.75, dim=0)
 iqr = q75 - q25
-median = torch.median(Xtr, dim=0).values
 
-Xtr = (Xtr - median) / (iqr + 1e-8)
-Xtest=(Xtest-median) / (iqr+ 1e-8)
+Xtr = (Xtr_raw - median) / (iqr + 1e-8)
+Xval = (Xval_raw - median) / (iqr + 1e-8)
+Xtest = (Xtest_raw - median) / (iqr + 1e-8)
 
-emb=torch.empty(5,3)
-torch.nn.init.xavier_normal_(emb)
-w1=torch.empty(59,25)
-torch.nn.init.xavier_normal_(w1)
-b1=torch.zeros(25) 
-w2=torch.empty(25,16)
-torch.nn.init.xavier_normal_(w2)
-b2=torch.zeros(16)
-w3 = torch.empty(16, 2)
-torch.nn.init.xavier_normal_(w3)
-b3=torch.zeros(2)
-w4=torch.empty(16, 3)
-torch.nn.init.xavier_normal_(w4)
-b4=torch.zeros(3)
 
-parametri = [emb, w1,b1,w2,b2,w3,b3,w4,b4]
+class BettingNet(nn.Module):
+    def __init__(self, input_dim):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, 25)
+        self.fc2 = nn.Linear(25, 16)
+        self.fc3 = nn.Linear(16, 3)
+        self.drop = nn.Dropout(p=0.10)
 
-for p in parametri:
-    p.requires_grad=True
+        nn.init.xavier_normal_(self.fc1.weight)
+        nn.init.zeros_(self.fc1.bias)
+        nn.init.xavier_normal_(self.fc2.weight)
+        nn.init.zeros_(self.fc2.bias)
+        nn.init.xavier_normal_(self.fc3.weight)
+        nn.init.zeros_(self.fc3.bias)
 
-lR=torch.nn.LeakyReLU(0.1)
-dimBatch=2048
-criterion = torch.nn.SmoothL1Loss(beta=1.0)
+    def forward(self, x):
+        h = torch.tanh(self.fc1(x))
+        h = self.drop(h)
+        h = torch.tanh(self.fc2(h))
+        return self.fc3(h)
 
-for i in range(epoche):
+
+model = BettingNet(N_FEATURES)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.003, weight_decay=0.008)
+criterion = nn.CrossEntropyLoss(label_smoothing=0.06)
+
+epoche_max = 6000
+dimBatch = 1024
+patience = 800
+counter_patience = 0
+best_brier = float("inf")
+best_state = None
+
+y_tr_one_hot = F.one_hot(Ytr1x2, num_classes=3).float()
+y_val_one_hot = F.one_hot(Yval1x2, num_classes=3).float()
+y_test_one_hot = F.one_hot(Ytest1x2, num_classes=3).float()
+
+for i in range(epoche_max):
+    model.train()
     ind = torch.randint(0, len(Xtr), (dimBatch,))
-    emb_batch = emb[DIVtr[ind]]
-    X_input = torch.cat([Xtr[ind], emb_batch], dim=1)
-    X_input=F.batch_norm(X_input, running_mean=None, running_var=None, training=True)
-    h=torch.tanh(X_input @ w1 + b1)
-    h_drop=F.dropout(h, p=0.1, training=True)
-    k=torch.tanh(h_drop @ w2 + b2)
-    o=k @ w3 + b3
-    outputxG=F.softplus(o)
-    logits1x2= k @ w4 + b4
-    loss_xg = criterion(outputxG, Ytr[ind])
-    loss_1x2=F.cross_entropy(logits1x2, Ytr1x2[ind])
-    loss = loss_xg + 0.3*loss_1x2
+    X_batch = Xtr[ind]
+    Y_batch = Ytr1x2[ind]
 
-
-    if i<3000:
-        rate=0.05
-    elif i <=10000:
-        rate=0.008
-    else: rate=0.001
-    for p in parametri:
-        p.grad=None
-    
+    optimizer.zero_grad()
+    logits = model(X_batch)
+    loss = criterion(logits, Y_batch)
     loss.backward()
-    torch.nn.utils.clip_grad_norm_(parametri, max_norm=1.0)
-    
-    for p in parametri:
-        p.data += -rate * p.grad
-    #if i % 10000 == 0:
-    print(f'{i}: {loss.data}')
 
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+    optimizer.step()
 
+    # Valutazione periodica solo su VALIDATION SET per early stopping
+    if i % 50 == 0:
+        model.eval()
+        with torch.no_grad():
+            logits_val = model(Xval)
+            probs_val = F.softmax(logits_val, dim=1)
+            brier_val = torch.mean(torch.sum((probs_val - y_val_one_hot) ** 2, dim=1)).item()
 
+            if brier_val < best_brier:
+                best_brier = brier_val
+                best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+                counter_patience = 0
+            else:
+                counter_patience += 50
+
+            if counter_patience >= patience:
+                print(f"Early stopping at step {i} (best val brier: {best_brier:.4f})")
+                break
+
+if best_state is not None:
+    model.load_state_dict(best_state)
+
+model.eval()
 with torch.no_grad():
-    emb_test = emb[DIVtest]
-    X_input = torch.cat([Xtest, emb_test], dim=1)
-    X_input = F.batch_norm(X_input, running_mean=None, running_var=None, training=True) 
-    h = torch.tanh(X_input @ w1 + b1)
-    k = torch.tanh(h @ w2 + b2)
-    o = k @ w3 + b3
-    outputxG = F.softplus(o)
-    logits1x2 = k @ w4 + b4
+    # Valutazione Train
+    logits_tr = model(Xtr)
+    probs_tr = F.softmax(logits_tr, dim=1)
+    brier_tr = torch.mean(torch.sum((probs_tr - y_tr_one_hot) ** 2, dim=1))
+    acc_tr = (torch.argmax(logits_tr, dim=1) == Ytr1x2).float().mean()
 
-    loss_xG = criterion(outputxG, Ytest)
-    loss_1x2 = F.cross_entropy(logits1x2, Ytest1x2)
-    loss = loss_xG + 0.3 * loss_1x2
-    mae = torch.abs(outputxG - Ytest).mean().item()
-    predizioni_1x2 = torch.argmax(logits1x2, dim=1)
-    accuratezza = (predizioni_1x2 == Ytest1x2).float().mean()
+    # Valutazione Validation
+    logits_val = model(Xval)
+    probs_val = F.softmax(logits_val, dim=1)
+    brier_val = torch.mean(torch.sum((probs_val - y_val_one_hot) ** 2, dim=1))
+    acc_val = (torch.argmax(logits_val, dim=1) == Yval1x2).float().mean()
 
-    print(f"Loss: {loss.item():.4f} | MAE: {mae:.3f} | Accuratezza 1X2: {accuratezza.item():.2%}")
+    # Valutazione Test Set (100% blind out-of-sample)
+    logits_test = model(Xtest)
+    loss_test = F.cross_entropy(logits_test, Ytest1x2)
+    probs_test = F.softmax(logits_test, dim=1)
+    brier_test = torch.mean(torch.sum((probs_test - y_test_one_hot) ** 2, dim=1))
+    acc_test = (torch.argmax(logits_test, dim=1) == Ytest1x2).float().mean()
 
-# accuratezza sul TRAIN set (con la stessa pipeline usata per il test)
-with torch.no_grad():
-    emb_tr = emb[DIVtr]
-    Xtr_input = torch.cat([Xtr, emb_tr], dim=1)
-    Xtr_input = F.batch_norm(Xtr_input, running_mean=None, running_var=None, training=True)
-    h_tr = torch.tanh(Xtr_input @ w1 + b1)
-    k_tr = torch.tanh(h_tr @ w2 + b2)
-    logits_tr = k_tr @ w4 + b4
-    pred_tr = torch.argmax(logits_tr, dim=1)
-    acc_tr = (pred_tr == Ytr1x2).float().mean()
-    print(f"Accuratezza TRAIN: {acc_tr.item():.2%}")
-    print(f"Accuratezza TEST: {accuratezza.item():.2%}")
+    print(f"Train Brier: {brier_tr.item():.4f} | Train Acc: {acc_tr.item():.2%}")
+    print(f"Val Brier:   {brier_val.item():.4f} | Val Acc:   {acc_val.item():.2%}")
+    print(f"Test Loss:   {loss_test.item():.4f} | Test Brier: {brier_test.item():.4f} | Test Acc: {acc_test.item():.2%}")
 
-checkpoint = {
-    "emb": emb.detach(),
-    "w1": w1.detach(),
-    "b1": b1.detach(),
-    "w2": w2.detach(),
-    "b2": b2.detach(),
-    "w3": w3.detach(),
-    "b3": b3.detach(),
-    "w4": w4.detach(),
-    "b4": b4.detach(),
-    "median": median.detach(),
-    "iqr": iqr.detach(),
-    "campionati": campionati,
-}
-
-torch.save(checkpoint, "modello_calcio_v1.pt")
-
-
-
-
-
-
-
-
-
-
-
+torch.save(
+    {
+        "model_state": model.state_dict(),
+        "median": median.detach(),
+        "iqr": iqr.detach(),
+        "n_features": N_FEATURES,
+    },
+    "modello_calcio_v1.pt",
+)
 
 
 

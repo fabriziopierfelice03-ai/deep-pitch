@@ -1,209 +1,209 @@
+import os
 import math
 import sys
+import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-import json
 
-sys.stdout.reconfigure(encoding='utf-8')
-
-# 1. Carica il checkpoint del modello salvato
-checkpoint = torch.load("models/modello_calcio_v1.pt")
-
-emb = checkpoint["emb"]
-w1, b1 = checkpoint["w1"], checkpoint["b1"]
-w2, b2 = checkpoint["w2"], checkpoint["b2"]
-w3, b3 = checkpoint["w3"], checkpoint["b3"]
-w4, b4 = checkpoint["w4"], checkpoint["b4"]
-median, iqr = checkpoint["median"], checkpoint["iqr"]
-campionati_map = checkpoint["campionati"]
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 
-def poisson_pmf(k, lambda_val):
-    """Calcola la probabilità P(X = k) per una variabile di Poisson con media lambda_val."""
-    return (lambda_val**k * math.exp(-lambda_val)) / math.factorial(k)
+class BettingNet(nn.Module):
+    def __init__(self, input_dim=56):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, 25)
+        self.fc2 = nn.Linear(25, 16)
+        self.fc3 = nn.Linear(16, 3)
+        self.drop = nn.Dropout(p=0.10)
+
+    def forward(self, x):
+        h = torch.tanh(self.fc1(x))
+        h = self.drop(h)
+        h = torch.tanh(self.fc2(h))
+        return self.fc3(h)
 
 
-def calcola_poisson_stats(xg_casa, xg_trasf, max_gol=7):
+# Bayesian Shrinkage Logistic Regression Hyperparameters
+# Fitted on 14,400 training fixtures via maximum likelihood
+BAYES_ALPHA = 0.0806
+BAYES_BETA_MODEL = 0.6173   # 55.1% Relative Weight
+BAYES_BETA_BOOK = 0.5035    # 44.9% Relative Weight
+
+
+def _find_checkpoint():
+    candidates = [
+        "models/modello_calcio_v1.pt",
+        "modello_calcio_v1.pt",
+        os.path.join(os.path.dirname(__file__), "..", "models", "modello_calcio_v1.pt"),
+        os.path.join(os.path.dirname(__file__), "modello_calcio_v1.pt"),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return "models/modello_calcio_v1.pt"
+
+
+# Load model checkpoint
+checkpoint_path = _find_checkpoint()
+checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+
+median = checkpoint["median"]
+iqr = checkpoint["iqr"]
+n_features = checkpoint.get("n_features", 56)
+
+model = BettingNet(n_features)
+model.load_state_dict(checkpoint["model_state"])
+model.eval()
+
+
+def logit(p, eps=1e-5):
+    """Numerically stable logit transformation."""
+    p = np.clip(p, eps, 1.0 - eps)
+    return np.log(p / (1.0 - p))
+
+
+def apply_bayesian_shrinkage(raw_probs, market_odds):
     """
-    Genera la matrice dei risultati esatti e ricava le probabilità per:
-    1X2, Under/Over 2.5, Goal/No Goal.
+    Combines raw neural network probabilities with de-vigged bookmaker odds
+    using empirical Bayesian Shrinkage via logistic regression:
+      z_i = alpha + beta_model * logit(p_model,i) + beta_book * logit(p_book,i)
+      p_calib,i = sigma(z_i) / sum(sigma(z_j))
+
+    Parameters:
+      - raw_probs: list or array of 3 floats [p1, pX, p2] summing to 1.0
+      - market_odds: list or array of 3 floats [q1, qX, q2] decimal odds
+
+    Returns:
+      - dict with calibrated probabilities, fair odds, and de-vigged book probabilities.
     """
-    p_1 = 0.0
-    p_X = 0.0
-    p_2 = 0.0
-    p_under25 = 0.0
-    p_goal = 0.0
+    q1, qx, q2 = market_odds
+    invs = [1.0 / q1, 1.0 / qx, 1.0 / q2]
+    margin_sum = sum(invs)
+    p_book = [inv / margin_sum for inv in invs]
 
-    for i in range(max_gol):  # Gol Casa
-        prob_i = poisson_pmf(i, xg_casa)
-        for j in range(max_gol):  # Gol Trasferta
-            prob_j = poisson_pmf(j, xg_trasf)
-            prob_punteggio = prob_i * prob_j
+    logits_model = [logit(p) for p in raw_probs]
+    logits_book = [logit(p) for p in p_book]
 
-            # 1X2
-            if i > j:
-                p_1 += prob_punteggio
-            elif i == j:
-                p_X += prob_punteggio
-            else:
-                p_2 += prob_punteggio
+    z = [
+        BAYES_ALPHA + BAYES_BETA_MODEL * lm + BAYES_BETA_BOOK * lb
+        for lm, lb in zip(logits_model, logits_book)
+    ]
 
-            # Under / Over 2.5
-            if (i + j) < 2.5:
-                p_under25 += prob_punteggio
-
-            # Goal / No Goal
-            if i > 0 and j > 0:
-                p_goal += prob_punteggio
-
-    p_over25 = 1.0 - p_under25
-    p_nogoal = 1.0 - p_goal
+    p_raw = [1.0 / (1.0 + np.exp(-zi)) for zi in z]
+    total_p = sum(p_raw)
+    p_calib = [p / total_p for p in p_raw]
 
     return {
-        "1X2": {
-            "1": round(p_1 * 100, 1),
-            "X": round(p_X * 100, 1),
-            "2": round(p_2 * 100, 1),
-        },
-        "Fair_Odds_1X2": {
-            "1": round(1.0 / (p_1 + 1e-8), 2),
-            "X": round(1.0 / (p_X + 1e-8), 2),
-            "2": round(1.0 / (p_2 + 1e-8), 2),
-        },
-        "Under_Over_2.5": {
-            "Under_2.5_%": round(p_under25 * 100, 1),
-            "Over_2.5_%": round(p_over25 * 100, 1),
-            "Quota_Under": round(1.0 / (p_under25 + 1e-8), 2),
-            "Quota_Over": round(1.0 / (p_over25 + 1e-8), 2),
-        },
-        "Goal_NoGoal": {
-            "Goal_%": round(p_goal * 100, 1),
-            "NoGoal_%": round(p_nogoal * 100, 1),
-            "Quota_Goal": round(1.0 / (p_goal + 1e-8), 2),
-            "Quota_NoGoal": round(1.0 / (p_nogoal + 1e-8), 2),
-        },
+        "calibrated_probs": p_calib,
+        "book_probs": p_book,
+        "fair_odds": [round(1.0 / p, 2) for p in p_calib],
     }
 
 
-def predici_partita(codice_campionato, feature_grezze):
+def predici_partita(arg1, arg2=None, market_odds=None):
     """
-    Input:
-      - codice_campionato (str): 'E0', 'F1', 'SP1', 'I1', oppure 'D1'
-      - feature_grezze (list/Tensor): 56 float non normalizzati
+    Universal Match Prediction Engine.
+    Accepts either:
+      - predici_partita(features_56, market_odds=None)
+      - predici_partita(codice_campionato, features_56, market_odds=None) (backwards-compatible)
+
+    Returns dictionary with raw Softmax 1X2 probabilities, fair odds,
+    and optional Bayesian Shrinkage calibrated distribution if market_odds are provided.
     """
+    if isinstance(arg1, str) and arg2 is not None:
+        features = arg2
+    else:
+        features = arg1
+
+    if len(features) != 56:
+        raise ValueError(f"Feature vector must have exactly 56 elements, got {len(features)}")
+
     with torch.no_grad():
-        # 1. Normalizzazione feature numeriche tramite lo scaler del Training Set
-        x_num = torch.tensor(feature_grezze, dtype=torch.float32)
-        x_num_scaled = (x_num - median) / (iqr + 1e-8)
+        x = torch.tensor(features, dtype=torch.float32)
+        x_scaled = (x - median) / (iqr + 1e-8)
+        logits = model(x_scaled.unsqueeze(0)).squeeze(0)
+        probs = F.softmax(logits, dim=0).tolist()
 
-        # 2. Lookup Embedding Campionato
-        div_id = campionati_map[codice_campionato]
-        div_emb = emb[div_id]
+    p1, px, p2 = probs
 
-        # 3. Concatenazione (Dimensione = 59: 56 numeriche + 3 embedding)
-        x_input = torch.cat([x_num_scaled, div_emb]).unsqueeze(0)
-
-        # 4. Forward Pass
-        h = torch.tanh(x_input @ w1 + b1)
-        k = torch.tanh(h @ w2 + b2)
-
-        output_xg = F.softplus(k @ w3 + b3).squeeze(0)
-        logits_1x2 = (k @ w4 + b4).squeeze(0)
-        probs_1x2 = F.softmax(logits_1x2, dim=0)
-
-        xg_c, xg_t = output_xg[0].item(), output_xg[1].item()
-        p1_net, px_net, p2_net = (
-            probs_1x2[0].item(),
-            probs_1x2[1].item(),
-            probs_1x2[2].item(),
-        )
-
-        # 5. Calcolo Poisson dagli xG predetti
-        poisson_res = calcola_poisson_stats(xg_c, xg_t)
-
-        return {
-            "xG_Predetti": {"Casa": round(xg_c, 2), "Trasferta": round(xg_t, 2)},
-            "Rete_Softmax_1X2": {
-                "Probabilita_%": {
-                    "1": round(p1_net * 100, 1),
-                    "X": round(px_net * 100, 1),
-                    "2": round(p2_net * 100, 1),
-                },
-                "Fair_Odds": {
-                    "1": round(1.0 / (p1_net + 1e-8), 2),
-                    "X": round(1.0 / (px_net + 1e-8), 2),
-                    "2": round(1.0 / (p2_net + 1e-8), 2),
-                },
+    result = {
+        "Rete_Softmax_1X2": {
+            "Probabilita_%": {
+                "1": round(p1 * 100, 2),
+                "X": round(px * 100, 2),
+                "2": round(p2 * 100, 2),
             },
-            "Poisson_Stats": poisson_res,
+            "Fair_Odds": {
+                "1": round(1.0 / (p1 + 1e-8), 2),
+                "X": round(1.0 / (px + 1e-8), 2),
+                "2": round(1.0 / (p2 + 1e-8), 2),
+            },
+        }
+    }
+
+    if market_odds is not None and len(market_odds) == 3:
+        shrunk = apply_bayesian_shrinkage([p1, px, p2], market_odds)
+        p1_c, px_c, p2_c = shrunk["calibrated_probs"]
+        q1, qx, q2 = market_odds
+
+        result["Bayesian_Shrinkage_1X2"] = {
+            "Probabilita_%": {
+                "1": round(p1_c * 100, 2),
+                "X": round(px_c * 100, 2),
+                "2": round(p2_c * 100, 2),
+            },
+            "Fair_Odds": {
+                "1": shrunk["fair_odds"][0],
+                "X": shrunk["fair_odds"][1],
+                "2": shrunk["fair_odds"][2],
+            },
+            "Market_Odds": {"1": q1, "X": qx, "2": q2},
+            "De_Vigged_Market_%": {
+                "1": round(shrunk["book_probs"][0] * 100, 2),
+                "X": round(shrunk["book_probs"][1] * 100, 2),
+                "2": round(shrunk["book_probs"][2] * 100, 2),
+            },
+            "Relative_Weights": {"Model": "55.1%", "Market": "44.9%"},
         }
 
+    return result
+
+
 def stampa_report_partita(res, nome_casa="Casa", nome_trasf="Trasferta"):
-    print("=" * 60)
-    print(f"   REPORT PREDIZIONE: {nome_casa.upper()} vs {nome_trasf.upper()}")
-    print("=" * 60)
+    print("=" * 65)
+    print(f"   DEEPPITCH PREDICTION REPORT: {nome_casa.upper()} vs {nome_trasf.upper()}")
+    print("=" * 65)
 
-    # 1. xG
-    xg_c = res["xG_Predetti"]["Casa"]
-    xg_t = res["xG_Predetti"]["Trasferta"]
-    print(f"\n📊 xG PREDETTI:  {nome_casa} {xg_c} - {xg_t} {nome_trasf}")
-
-    # 2. Rete Neurale 1X2
     s_prob = res["Rete_Softmax_1X2"]["Probabilita_%"]
     s_odds = res["Rete_Softmax_1X2"]["Fair_Odds"]
-    print("\n🧠 RETE NEURALE (1X2 Direct):")
-    print(
-        f"   • [1]: {s_prob['1']}%  (Quota Fair: {s_odds['1']})"
-    )
-    print(
-        f"   • [X]: {s_prob['X']}%  (Quota Fair: {s_odds['X']})"
-    )
-    print(
-        f"   • [2]: {s_prob['2']}%  (Quota Fair: {s_odds['2']})"
-    )
+    print("\n[🧠] RAW NEURAL NETWORK (Direct 1X2 Softmax):")
+    print(f"   • [1]: {s_prob['1']}%  (Fair Odd: {s_odds['1']})")
+    print(f"   • [X]: {s_prob['X']}%  (Fair Odd: {s_odds['X']})")
+    print(f"   • [2]: {s_prob['2']}%  (Fair Odd: {s_odds['2']})")
 
-    # 3. Poisson 1X2
-    p_prob = res["Poisson_Stats"]["1X2"]
-    p_odds = res["Poisson_Stats"]["Fair_Odds_1X2"]
-    print("\n🎲 SIMULAZIONE POISSON (1X2):")
-    print(
-        f"   • [1]: {p_prob['1']}%  (Quota Fair: {p_odds['1']})"
-    )
-    print(
-        f"   • [X]: {p_prob['X']}%  (Quota Fair: {p_odds['X']})"
-    )
-    print(
-        f"   • [2]: {p_prob['2']}%  (Quota Fair: {p_odds['2']})"
-    )
+    if "Bayesian_Shrinkage_1X2" in res:
+        b_prob = res["Bayesian_Shrinkage_1X2"]["Probabilita_%"]
+        b_odds = res["Bayesian_Shrinkage_1X2"]["Fair_Odds"]
+        m_odds = res["Bayesian_Shrinkage_1X2"]["Market_Odds"]
+        m_prob = res["Bayesian_Shrinkage_1X2"]["De_Vigged_Market_%"]
 
-    # 4. Mercati accessori
-    uo = res["Poisson_Stats"]["Under_Over_2.5"]
-    gn = res["Poisson_Stats"]["Goal_NoGoal"]
-    print("\n🎯 MERCATI ACCESSORI (Poisson):")
-    print(
-        f"   • Over 2.5:  {uo['Over_2.5_%']}%  | Quota Fair: {uo['Quota_Over']}"
-    )
-    print(
-        f"   • Under 2.5: {uo['Under_2.5_%']}%  | Quota Fair: {uo['Quota_Under']}"
-    )
-    print(
-        f"   • Goal:      {gn['Goal_%']}%  | Quota Fair: {gn['Quota_Goal']}"
-    )
-    print(
-        f"   • No Goal:   {gn['NoGoal_%']}%  | Quota Fair: {gn['Quota_NoGoal']}"
-    )
-    print("=" * 60)
-
-
-
+        print("\n[⚖️] BAYESIAN SHRINKAGE CALIBRATION (Model 55.1% | Market 44.9%):")
+        print(f"   • [1]: {b_prob['1']}% (Fair Odd: {b_odds['1']} | Book: {m_odds['1']} [Imp: {m_prob['1']}%])")
+        print(f"   • [X]: {b_prob['X']}% (Fair Odd: {b_odds['X']} | Book: {m_odds['X']} [Imp: {m_prob['X']}%])")
+        print(f"   • [2]: {b_prob['2']}% (Fair Odd: {b_odds['2']} | Book: {m_odds['2']} [Imp: {m_prob['2']}%])")
+    print("=" * 65)
 
 
 if __name__ == "__main__":
-    res = predici_partita("I1", [
-        1833.12, 1812.3, 8.0, 11.0, 7.0, 6.0, 1.36, 1.07, 1.89, 0.0, 1.5, 0.98,
-        1.59, 0.7, 0.51, 1.93, 0.17, 2.97, 1.57, 1.14, 1.44, 1.0, 1.36, 1.43,
-        0.56, 2.0, -0.07, -0.16, 1.4, 1.4, 0.8, 1.8, 0.76, 1.71, 0.5, 0.5, 6.0,
-        6.0, 2.0, 2.0, -3.0, -4.0, -1.0, -2.0, 6.0, 5.0, 5.0, 1.0, 18.14,
-        12.86, 6.29, 3.43, 9.43, 2.14, 3.43, 1.29
-    ])
-    stampa_report_partita(res, "Roma", "Inter")
+    sample_56 = [
+        1620.0, 1740.0, 8.0, 10.0, 3.0, 4.0, 1.0, 1.133, 1.667, 0.0, 1.637,
+        1.343, 1.978, 0.35, 1.91, 1.398, 1.944, 3.07, 1.267, 1.467, 1.667,
+        0.0, 2.067, 1.933, 2.0, 4.0, 0.37, -0.124, 1.3, 1.3, 1.4, 1.2, 1.33,
+        1.14, 1.5, 1.5, 7.0, 7.0, 2.0, 2.0, -2.0, -3.0, -1.0, -2.0, 3.0,
+        3.0, 4.0, 1.0, 17.0, 13.8, 6.4, 4.933, 5.667, 4.6, 1.467, 1.733
+    ]
+    sample_odds = [2.70, 3.30, 2.60]
+    out = predici_partita(sample_56, market_odds=sample_odds)
+    stampa_report_partita(out, "Lazio", "Milan")
