@@ -120,12 +120,12 @@ feature_56 = [
 
 ## Strategic Bet Qualification Criteria
 
-Once `predict.py` generates model probabilities, selections are evaluated against the strategy's quantitative filters:
+Once `predict.py` generates calibrated probabilities via Bayesian Shrinkage, selections are evaluated against the strategy's quantitative filters:
 
 1. **Expected Value Threshold:**
-   $$\text{EV} = (P_{\text{model}} \times \text{Odds}_{\text{Bookmaker}}) - 1 > +13.0\% \quad (+0.13)$$
+   $$\text{EV} = (P_{\text{calib}} \times \text{Odds}_{\text{Bookmaker}}) - 1 > +5.5\% \quad (+0.055)$$
 2. **Odds Filtering Range:**
    $$1.60 < \text{Odds}_{\text{Bookmaker}} < 3.10$$
 3. **Position Sizing (Quarter Kelly Criterion):**
-   $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.01\right)$$
-   * Individual stake is capped at **1.0%** of current bankroll.
+   $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.015\right)$$
+   * Individual stake is capped at **1.5%** of current bankroll.
