@@ -113,6 +113,56 @@ StrategyResult run_strategy(const std::vector<Match>& matches, double ev_thresh,
     return {ev_thresh, total_bets, won_bets, win_rate, avg_odds, bankroll, peak, max_drawdown * 100.0, flat_pnl, roi_perc};
 }
 
+struct ShinProbs {
+    double p_1;
+    double p_x;
+    double p_2;
+    double z;
+};
+
+ShinProbs devig_shin(double q_1, double q_x, double q_2) {
+    double pi_1 = 1.0 / q_1;
+    double pi_x = 1.0 / q_x;
+    double pi_2 = 1.0 / q_2;
+    double booksum = pi_1 + pi_x + pi_2;
+
+    if (booksum <= 1.0) {
+        return {pi_1 / booksum, pi_x / booksum, pi_2 / booksum, 0.0};
+    }
+
+    double low = 1e-7;
+    double high = 1.0 - 1e-7;
+    double z_opt = (low + high) * 0.5;
+
+    auto eval_p = [&](double z, double& p1, double& px, double& p2) {
+        double den = 2.0 * (1.0 - z);
+        p1 = (std::sqrt(z * z + 4.0 * (1.0 - z) * (pi_1 * pi_1 / booksum)) - z) / den;
+        px = (std::sqrt(z * z + 4.0 * (1.0 - z) * (pi_x * pi_x / booksum)) - z) / den;
+        p2 = (std::sqrt(z * z + 4.0 * (1.0 - z) * (pi_2 * pi_2 / booksum)) - z) / den;
+        return (p1 + px + p2) - 1.0;
+    };
+
+    double p1_est, px_est, p2_est;
+    for (int iter = 0; iter < 50; ++iter) {
+        double mid = (low + high) * 0.5;
+        double diff = eval_p(mid, p1_est, px_est, p2_est);
+        if (std::abs(diff) < 1e-7) {
+            z_opt = mid;
+            break;
+        }
+        if (diff > 0.0) {
+            low = mid;
+        } else {
+            high = mid;
+            z_opt = mid;
+        }
+    }
+
+    eval_p(z_opt, p1_est, px_est, p2_est);
+    double total = p1_est + px_est + p2_est;
+    return {p1_est / total, px_est / total, p2_est / total, z_opt};
+}
+
 int main() {
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "=========================================================================\n";
@@ -149,14 +199,11 @@ int main() {
         double q_d = std::stod(q_dstring);
         double q_a = std::stod(q_astring);
 
-        // De-vigged Bookmaker Implied Probabilities
-        double I_1 = 1.0 / q_h;
-        double I_X = 1.0 / q_d;
-        double I_2 = 1.0 / q_a;
-        double s = I_1 + I_2 + I_X;
-        double p_h_book = I_1 / s;
-        double p_d_book = I_X / s;
-        double p_a_book = I_2 / s;
+        // De-vigged Bookmaker Implied Probabilities via Shin (1993)
+        ShinProbs shin = devig_shin(q_h, q_d, q_a);
+        double p_h_book = shin.p_1;
+        double p_d_book = shin.p_x;
+        double p_a_book = shin.p_2;
 
         // Raw Neural Network Softmax Output (56 features)
         double p_h = std::stod(p_hstring) / 100.0;

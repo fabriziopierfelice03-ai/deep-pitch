@@ -29,8 +29,8 @@ To rigorously stress-test strategy viability without lookahead bias or data cont
                Edge:   EV > +5.5% (Target Strategy)
                              │
                              ▼
-              [ 384 Qualified Value Bets ]
-              (183 Won | 47.66% Win Rate | Avg Odds: 2.24)
+              [ 405 Qualified Value Bets ]
+              (192 Won | 47.41% Win Rate | Avg Odds: 2.23)
                              │
                ┌─────────────┴─────────────┐
                ▼                           ▼
@@ -38,9 +38,9 @@ To rigorously stress-test strategy viability without lookahead bias or data cont
      (1.5% Bankroll Hard Cap)     (Bootstrap & Permutation)
                │                           │
                ▼                           ▼
-        +17.08% Net ROI             0.00% Risk of Ruin
-        +11.90 Flat PnL Units       25.19% Median Drawdown
-        22.29% Max Drawdown         €1,167 Median Bankroll
+        +11.76% Net ROI             0.00% Risk of Ruin
+        +8.72 Flat PnL Units       26.84% Median Drawdown
+        22.82% Max Drawdown         €1,118 Median Bankroll
 ```
 
 ### 1. Capital Allocation & Risk Management
@@ -54,18 +54,18 @@ $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.2
 * **Selection Filters:** Matches are only executed if $1.60 < \text{Odds} < 3.10$ and Expected Value $\text{EV} = (p \cdot q) - 1 > +5.5\%$.
 
 ### 2. Out-of-Sample Sensitivity Analysis (1,627 Test Matches)
-The table below illustrates the strategy's sensitivity across various EV thresholds on the virgin out-of-sample test set:
+The table below illustrates the strategy's sensitivity across various EV thresholds on the virgin out-of-sample test set using **Shin (1993) de-vigging**:
 
 | EV Threshold | Bets | Won | Win Rate | Avg Odds | Final Bankroll | ROI (%) | Max Drawdown | Flat PnL |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **2.0%** | 556 | 259 | 46.58% | 2.23 | €1,061.48 | +6.15% | 25.16% | +1.03u |
-| **3.0%** | 504 | 235 | 46.63% | 2.24 | €1,083.98 | +8.40% | 26.26% | +1.96u |
-| **4.0%** | 455 | 216 | 47.47% | 2.24 | €1,158.86 | +15.89% | 26.20% | +9.22u |
-| **5.0%** | 407 | 191 | 46.93% | 2.24 | €1,087.33 | +8.73% | 24.13% | +4.99u |
-| **5.5% (Target)** | **384** | **183** | **47.66%** | **2.24** | **€1,170.77** | **+17.08%** | **22.29%** | **+11.90u** |
-| **6.0%** | 367 | 174 | 47.41% | 2.25 | €1,134.11 | +13.41% | 24.35% | +9.58u |
-| **7.0%** | 336 | 158 | 47.02% | 2.25 | €1,078.20 | +7.82% | 23.78% | +6.20u |
-| **8.0%** | 302 | 139 | 46.03% | 2.26 | €1,003.88 | +0.39% | 25.61% | +0.95u |
+| **2.0%** | 584 | 276 | 47.26% | 2.22 | €1,067.73 | +6.77% | 26.02% | +6.50u |
+| **3.0%** | 519 | 244 | 47.01% | 2.23 | €1,082.45 | +8.24% | 25.49% | +5.28u |
+| **4.0%** | 467 | 221 | 47.32% | 2.23 | €1,119.56 | +11.96% | 26.70% | +5.86u |
+| **5.0%** | 421 | 201 | 47.74% | 2.23 | €1,153.11 | +15.31% | 22.81% | +9.92u |
+| **5.5% (Target)** | **405** | **192** | **47.41%** | **2.23** | **€1,117.55** | **+11.76%** | **22.82%** | **+8.72u** |
+| **6.0%** | 381 | 183 | 48.03% | 2.24 | €1,193.86 | +19.39% | 23.33% | +13.68u |
+| **7.0%** | 347 | 164 | 47.26% | 2.24 | €1,085.29 | +8.53% | 24.97% | +7.09u |
+| **8.0%** | 316 | 146 | 46.20% | 2.25 | €989.42 | -1.06% | 25.00% | -0.00u |
 
 ### 3. Dual-Module Monte Carlo Stress Testing (10,000 Runs)
 
