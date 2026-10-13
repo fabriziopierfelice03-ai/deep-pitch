@@ -120,8 +120,10 @@ To harvest true predictive alpha while ensuring rigorous calibration, DeepPitch 
 ```
 
 ### Mathematical Formulation:
-1. **De-vigging Bookmaker Implied Probabilities:**
-   $$I_k = \frac{1}{q_k}, \quad s = \sum_{j \in \{1, X, 2\}} I_j, \quad p_{k, \text{book}} = \frac{I_k}{s}$$
+1. **De-vigging Bookmaker Consensus via Shin's Method (1993):**
+   Standard proportional scaling ($\frac{1/q_k}{\sum 1/q_j}$) assumes margins are distributed uniformly, distorting probabilities due to the structural **favorite-longshot bias**. DeepPitch solves for the informed trading parameter $z \in [0, 1)$ via:
+   $$\pi_k = \frac{1}{q_k}, \quad \Pi = \sum_{j \in \{1, X, 2\}} \pi_j, \quad p_{k, \text{book}}(z) = \frac{\sqrt{z^2 + 4(1 - z)\left(\frac{\pi_k^2}{\Pi}\right)} - z}{2(1 - z)}$$
+   where $z$ is solved numerically such that $\sum_j p_{j, \text{book}}(z) = 1.0$, accurately restoring the true consensus distribution $p_{k, \text{book}}$.
 
 2. **Logit Transformation:**
    $$\text{logit}(p) = \ln\left(\frac{p}{1 - p}\right)$$

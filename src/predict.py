@@ -64,7 +64,55 @@ def logit(p, eps=1e-5):
     return np.log(p / (1.0 - p))
 
 
-def apply_bayesian_shrinkage(raw_probs, market_odds):
+def devig_shin(market_odds, tol=1e-9, max_iter=100):
+    """
+    Shin (1993) algorithm for extracting true consensus probabilities
+    by explicitly modeling the bookmaker's favorite-longshot bias and insider trading factor z.
+
+    Formula (Shin 1993, Clarke 2014):
+      pi_i = 1.0 / q_i
+      booksum = sum(pi_i)
+      p_i(z) = (sqrt(z^2 + 4*(1-z)*(pi_i^2 / booksum)) - z) / (2*(1-z))
+    where z in [0, 1) is solved numerically such that sum(p_i(z)) == 1.0.
+
+    Returns:
+      (p_true: list of 3 floats, z: float)
+    """
+    odds = np.array(market_odds, dtype=float)
+    pi = 1.0 / odds
+    booksum = float(np.sum(pi))
+
+    if booksum <= 1.0:
+        p_prop = (pi / booksum).tolist()
+        return p_prop, 0.0
+
+    low, high = 1e-7, 1.0 - 1e-7
+
+    def _probs_for_z(z_val):
+        num = np.sqrt(z_val**2 + 4.0 * (1.0 - z_val) * (pi**2 / booksum)) - z_val
+        den = 2.0 * (1.0 - z_val)
+        return num / den
+
+    z_opt = (low + high) / 2.0
+    for _ in range(max_iter):
+        mid = (low + high) / 2.0
+        p_est = _probs_for_z(mid)
+        diff = float(np.sum(p_est)) - 1.0
+        if abs(diff) < tol:
+            z_opt = mid
+            break
+        if diff > 0.0:
+            low = mid
+        else:
+            high = mid
+            z_opt = mid
+
+    p_final = _probs_for_z(z_opt)
+    p_final = p_final / np.sum(p_final)
+    return p_final.tolist(), float(z_opt)
+
+
+def apply_bayesian_shrinkage(raw_probs, market_odds, devig_method="shin"):
     """
     Combines raw neural network probabilities with de-vigged bookmaker odds
     using empirical Bayesian Shrinkage via logistic regression:
@@ -74,14 +122,19 @@ def apply_bayesian_shrinkage(raw_probs, market_odds):
     Parameters:
       - raw_probs: list or array of 3 floats [p1, pX, p2] summing to 1.0
       - market_odds: list or array of 3 floats [q1, qX, q2] decimal odds
+      - devig_method: "shin" (Shin 1993, accounts for favorite-longshot bias) or "proportional" (naive)
 
     Returns:
       - dict with calibrated probabilities, fair odds, and de-vigged book probabilities.
     """
     q1, qx, q2 = market_odds
-    invs = [1.0 / q1, 1.0 / qx, 1.0 / q2]
-    margin_sum = sum(invs)
-    p_book = [inv / margin_sum for inv in invs]
+    if devig_method == "shin":
+        p_book, shin_z = devig_shin(market_odds)
+    else:
+        invs = [1.0 / q1, 1.0 / qx, 1.0 / q2]
+        margin_sum = sum(invs)
+        p_book = [inv / margin_sum for inv in invs]
+        shin_z = 0.0
 
     logits_model = [logit(p) for p in raw_probs]
     logits_book = [logit(p) for p in p_book]
@@ -99,15 +152,17 @@ def apply_bayesian_shrinkage(raw_probs, market_odds):
         "calibrated_probs": p_calib,
         "book_probs": p_book,
         "fair_odds": [round(1.0 / p, 2) for p in p_calib],
+        "shin_z": round(shin_z, 5),
+        "devig_method": devig_method,
     }
 
 
-def predici_partita(arg1, arg2=None, market_odds=None):
+def predici_partita(arg1, arg2=None, market_odds=None, devig_method="shin"):
     """
     Universal Match Prediction Engine.
     Accepts either:
-      - predici_partita(features_56, market_odds=None)
-      - predici_partita(codice_campionato, features_56, market_odds=None) (backwards-compatible)
+      - predici_partita(features_56, market_odds=None, devig_method="shin")
+      - predici_partita(codice_campionato, features_56, market_odds=None, devig_method="shin") (backwards-compatible)
 
     Returns dictionary with raw Softmax 1X2 probabilities, fair odds,
     and optional Bayesian Shrinkage calibrated distribution if market_odds are provided.
@@ -144,7 +199,7 @@ def predici_partita(arg1, arg2=None, market_odds=None):
     }
 
     if market_odds is not None and len(market_odds) == 3:
-        shrunk = apply_bayesian_shrinkage([p1, px, p2], market_odds)
+        shrunk = apply_bayesian_shrinkage([p1, px, p2], market_odds, devig_method=devig_method)
         p1_c, px_c, p2_c = shrunk["calibrated_probs"]
         q1, qx, q2 = market_odds
 
@@ -165,6 +220,8 @@ def predici_partita(arg1, arg2=None, market_odds=None):
                 "X": round(shrunk["book_probs"][1] * 100, 2),
                 "2": round(shrunk["book_probs"][2] * 100, 2),
             },
+            "De_Vig_Method": devig_method,
+            "Shin_Z": shrunk.get("shin_z", 0.0),
             "Relative_Weights": {"Model": "55.1%", "Market": "44.9%"},
         }
 
@@ -184,15 +241,17 @@ def stampa_report_partita(res, nome_casa="Casa", nome_trasf="Trasferta"):
     print(f"   • [2]: {s_prob['2']}%  (Fair Odd: {s_odds['2']})")
 
     if "Bayesian_Shrinkage_1X2" in res:
-        b_prob = res["Bayesian_Shrinkage_1X2"]["Probabilita_%"]
-        b_odds = res["Bayesian_Shrinkage_1X2"]["Fair_Odds"]
-        m_odds = res["Bayesian_Shrinkage_1X2"]["Market_Odds"]
-        m_prob = res["Bayesian_Shrinkage_1X2"]["De_Vigged_Market_%"]
+        b = res["Bayesian_Shrinkage_1X2"]
+        b_prob = b["Probabilita_%"]
+        b_odds = b["Fair_Odds"]
+        m_odds = b["Market_Odds"]
+        m_prob = b["De_Vigged_Market_%"]
+        devig_info = f"Shin z={b.get('Shin_Z', 0.0)}" if b.get("De_Vig_Method") == "shin" else "Proportional"
 
-        print("\n[⚖️] BAYESIAN SHRINKAGE CALIBRATION (Model 55.1% | Market 44.9%):")
-        print(f"   • [1]: {b_prob['1']}% (Fair Odd: {b_odds['1']} | Book: {m_odds['1']} [Imp: {m_prob['1']}%])")
-        print(f"   • [X]: {b_prob['X']}% (Fair Odd: {b_odds['X']} | Book: {m_odds['X']} [Imp: {m_prob['X']}%])")
-        print(f"   • [2]: {b_prob['2']}% (Fair Odd: {b_odds['2']} | Book: {m_odds['2']} [Imp: {m_prob['2']}%])")
+        print(f"\n[⚖️] BAYESIAN SHRINKAGE CALIBRATION ({devig_info} | Model 55.1% | Market 44.9%):")
+        print(f"   • [1]: {b_prob['1']}% (Fair Odd: {b_odds['1']} | Book: {m_odds['1']} [True Market: {m_prob['1']}%])")
+        print(f"   • [X]: {b_prob['X']}% (Fair Odd: {b_odds['X']} | Book: {m_odds['X']} [True Market: {m_prob['X']}%])")
+        print(f"   • [2]: {b_prob['2']}% (Fair Odd: {b_odds['2']} | Book: {m_odds['2']} [True Market: {m_prob['2']}%])")
     print("=" * 65)
 
 

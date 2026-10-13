@@ -121,5 +121,28 @@ class TestFeatureBuilder(unittest.TestCase):
         print("Softmax 1X2 Prob:", res["Rete_Softmax_1X2"]["Probabilita_%"])
         print("Bayesian Shrinkage Prob:", res["Bayesian_Shrinkage_1X2"]["Probabilita_%"])
 
+    def test_shin_devigging(self):
+        from src.predict import devig_shin
+        import numpy as np
+
+        # Heavy favorite market
+        odds = [1.30, 5.50, 9.00]
+        p_shin, z = devig_shin(odds)
+        
+        # 1. Must sum to 1.0
+        self.assertAlmostEqual(sum(p_shin), 1.0, places=6)
+        
+        # 2. Insider z parameter must be positive and reasonable
+        self.assertGreater(z, 0.0)
+        self.assertLess(z, 0.15)
+        
+        # 3. Favorite-longshot bias: Shin assigns higher true prob to favorite
+        # than naive proportional devigging, and lower to the longshot
+        invs = 1.0 / np.array(odds)
+        p_prop = invs / np.sum(invs)
+        self.assertGreater(p_shin[0], p_prop[0])
+        self.assertLess(p_shin[2], p_prop[2])
+
+
 if __name__ == "__main__":
     unittest.main()
