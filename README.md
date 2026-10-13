@@ -72,27 +72,27 @@ The table below illustrates the strategy's sensitivity across various EV thresho
 To evaluate tail risk and path dependency across thousands of possible trajectories, the C++ engine executes two complementary 10,000-iteration Monte Carlo procedures:
 
 #### Module A: Bootstrap Resampling (Sampling with Replacement)
-Simulates 10,000 alternative seasons by sampling 384 bets with replacement from the observed empirical trade distribution:
+Simulates 10,000 alternative seasons by sampling 405 bets with replacement from the observed empirical trade distribution:
 
 | Metric | Simulated Value | Risk Interpretation |
 | :--- | :---: | :--- |
 | **Probability of Ruin ($< €200$)** | **0.00%** | Zero runs breached the 80% loss barrier |
-| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€701.90** | Unfavorable variance regime over a full season |
-| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,167.04** | Central expectation aligns closely with realized +17.08% return |
-| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€1,977.36** | High-water mark under positive variance |
-| **Median Maximum Drawdown** | **25.19%** | Expected drawdown depth across simulated paths |
-| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **43.58%** | Drawdown boundary in adverse volatility regimes |
-| **Worst-Case Absolute Drawdown** | **67.31%** | Theoretical tail scenario across 3,840,000 total simulated wagers |
+| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€656.71** | Unfavorable variance regime over a full season |
+| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,117.53** | Central expectation aligns closely with realized +11.76% return |
+| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€1,864.65** | High-water mark under positive variance |
+| **Median Maximum Drawdown** | **26.84%** | Expected drawdown depth across simulated paths |
+| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **46.96%** | Drawdown boundary in adverse volatility regimes |
+| **Worst-Case Absolute Drawdown** | **68.30%** | Theoretical tail scenario across 4,050,000 total simulated wagers |
 
 #### Module B: Trade-Order Permutation (Reshuffling without Replacement)
-Quantifies sequence risk and losing-streak clustering by randomly shuffling the chronological order of the 384 observed historical bets:
+Quantifies sequence risk and losing-streak clustering by randomly shuffling the chronological order of the 405 observed historical bets:
 
 | Permutation Metric | Value | Risk Interpretation |
 | :--- | :---: | :--- |
-| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **17.20%** | Favorable dispersion of wins and losses |
-| **Median Drawdown ($50^{\text{th}}$ percentile)** | **24.65%** | Standard sequence-dependent drawdown |
-| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **35.60%** | Clustered adverse variance |
-| **Worst-Case Permutation Drawdown** | **48.41%** | Maximum clustering of losing bets in 10,000 random sequences |
+| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **18.33%** | Favorable dispersion of wins and losses |
+| **Median Drawdown ($50^{\text{th}}$ percentile)** | **26.12%** | Standard sequence-dependent drawdown |
+| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **37.47%** | Clustered adverse variance |
+| **Worst-Case Permutation Drawdown** | **52.01%** | Maximum clustering of losing bets in 10,000 random sequences |
 
 ### 4. Compiling and Running the C++ Engine
 
