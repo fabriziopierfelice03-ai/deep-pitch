@@ -11,7 +11,7 @@ def calculate_quarter_kelly(
     prob: float,
     bookmaker_odds: float,
     bankroll: float = 1000.0,
-    min_ev: float = 0.055,
+    min_ev: float = 0.050,
     min_odds: float = 1.60,
     max_odds: float = 3.10,
     max_cap: float = 0.015,
@@ -23,7 +23,7 @@ def calculate_quarter_kelly(
     - prob: probabilità stimata dal modello / calibrazione bayesiana (compresa tra 0.0 e 1.0)
     - bookmaker_odds: quota decimale offerta dal bookmaker
     - bankroll: capitale totale attuale (default 1000.0€)
-    - min_ev: soglia minima di valore atteso (default 5.5% = 0.055)
+    - min_ev: soglia minima di valore atteso (default 5.0% = 0.050)
     - min_odds: quota minima ammissibile (default 1.60)
     - max_odds: quota massima ammissibile (default 3.10)
     - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 1.5% = 0.015)
@@ -87,7 +87,7 @@ def calculate_half_kelly(
     prob: float,
     bookmaker_odds: float,
     bankroll: float = 1000.0,
-    min_ev: float = 0.055,
+    min_ev: float = 0.050,
     max_cap: float = 0.015,
 ) -> Dict[str, Any]:
     """Alias di retrocompatibilità che invoca calculate_quarter_kelly."""
@@ -104,7 +104,7 @@ def scan_match_markets(
     model_output: Dict[str, Any],
     market_odds: Dict[str, float],
     bankroll: float = 1000.0,
-    min_ev: float = 0.055,
+    min_ev: float = 0.050,
     min_odds: float = 1.60,
     max_odds: float = 3.10,
     max_cap: float = 0.015,
@@ -112,7 +112,7 @@ def scan_match_markets(
     """
     Confronta le probabilità calcolate da predict.py con le quote di mercato fornite.
     Privilegia le probabilità calibrate tramite Bayesian Shrinkage se disponibili.
-    Ritorna la lista delle selezioni con valore positivo (EV > 5.5%, Quote in 1.60-3.10).
+    Ritorna la lista delle selezioni con valore positivo (EV > 5.0%, Quote in 1.60-3.10).
     """
     opportunities = []
 

@@ -7,7 +7,7 @@ The framework operates on a **modernized dual-stack quantitative architecture**:
 2. **Empirical Bayesian Shrinkage Layer:** A calibrated logistic regression layer that blends the neural network's predictive alpha with de-vigged market consensus odds:
    $$\text{logit}(p_{\text{calib}}) = 0.0806 + 0.6173 \cdot \text{logit}(p_{\text{model}}) + 0.5035 \cdot \text{logit}(p_{\text{book}})$$
    yielding a balanced weighting of **55.1% Model Alpha** and **44.9% Market Consensus**.
-3. **100% Blind Out-of-Sample Test Set Validation:** Validated on **1,627 untouched out-of-sample fixtures** (10% temporal split), achieving **+17.08% net ROI** across 384 qualified bets at $\text{EV} > 5.5\%$ with a **22.29% maximum drawdown**.
+3. **100% Blind Out-of-Sample Test Set Validation:** Validated on **1,627 untouched out-of-sample fixtures** (10% temporal split), achieving **+15.31% net ROI** across 421 qualified bets at $\text{EV} > 5.0\%$ with a **22.81% maximum drawdown**.
 4. **High-Performance Simulation & Execution Engine (C++20):** An ultra-fast, cache-friendly native backtester featuring a **10,000-run Monte Carlo stress test** (Bootstrap resampling and trade-order permutation) executing 16,000+ fixtures in milliseconds.
 5. **Live Empirical Audit:** Transparent pre-match paper trading tracked in real time for the 2026/2027 season with zero lookahead bias.
 
@@ -26,11 +26,11 @@ To rigorously stress-test strategy viability without lookahead bias or data cont
       [ 1,627 Blind Out-of-Sample Test Matches (10%) ]
                              │
                Filter: 1.60 < Odds < 3.10
-               Edge:   EV > +5.5% (Target Strategy)
+               Edge:   EV > +5.0% (Target Strategy)
                              │
                              ▼
-              [ 405 Qualified Value Bets ]
-              (192 Won | 47.41% Win Rate | Avg Odds: 2.23)
+              [ 421 Qualified Value Bets ]
+              (201 Won | 47.74% Win Rate | Avg Odds: 2.23)
                              │
                ┌─────────────┴─────────────┐
                ▼                           ▼
@@ -38,9 +38,9 @@ To rigorously stress-test strategy viability without lookahead bias or data cont
      (1.5% Bankroll Hard Cap)     (Bootstrap & Permutation)
                │                           │
                ▼                           ▼
-        +11.76% Net ROI             0.00% Risk of Ruin
-        +8.72 Flat PnL Units       26.84% Median Drawdown
-        22.82% Max Drawdown         €1,118 Median Bankroll
+        +15.31% Net ROI             0.00% Risk of Ruin
+        +9.92 Flat PnL Units       26.25% Median Drawdown
+        22.81% Max Drawdown         €1,155 Median Bankroll
 ```
 
 ### 1. Capital Allocation & Risk Management
@@ -51,7 +51,7 @@ $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.2
 * $p$: Model probability calibrated via Bayesian Shrinkage.
 * $q$: Decimal odds offered by the market.
 * **Hard Capital Cap:** Individual position sizes never exceed **1.5%** of current bankroll under any circumstance.
-* **Selection Filters:** Matches are only executed if $1.60 < \text{Odds} < 3.10$ and Expected Value $\text{EV} = (p \cdot q) - 1 > +5.5\%$.
+* **Selection Filters:** Matches are only executed if $1.60 < \text{Odds} < 3.10$ and Expected Value $\text{EV} = (p \cdot q) - 1 > +5.0\%$.
 
 ### 2. Out-of-Sample Sensitivity Analysis (1,627 Test Matches)
 The table below illustrates the strategy's sensitivity across various EV thresholds on the virgin out-of-sample test set using **Shin (1993) de-vigging**:
@@ -61,8 +61,8 @@ The table below illustrates the strategy's sensitivity across various EV thresho
 | **2.0%** | 584 | 276 | 47.26% | 2.22 | €1,067.73 | +6.77% | 26.02% | +6.50u |
 | **3.0%** | 519 | 244 | 47.01% | 2.23 | €1,082.45 | +8.24% | 25.49% | +5.28u |
 | **4.0%** | 467 | 221 | 47.32% | 2.23 | €1,119.56 | +11.96% | 26.70% | +5.86u |
-| **5.0%** | 421 | 201 | 47.74% | 2.23 | €1,153.11 | +15.31% | 22.81% | +9.92u |
-| **5.5% (Target)** | **405** | **192** | **47.41%** | **2.23** | **€1,117.55** | **+11.76%** | **22.82%** | **+8.72u** |
+| **5.0% (Target)** | **421** | **201** | **47.74%** | **2.23** | **€1,153.11** | **+15.31%** | **22.81%** | **+9.92u** |
+| **5.5%** | 405 | 192 | 47.41% | 2.23 | €1,117.55 | +11.76% | 22.82% | +8.72u |
 | **6.0%** | 381 | 183 | 48.03% | 2.24 | €1,193.86 | +19.39% | 23.33% | +13.68u |
 | **7.0%** | 347 | 164 | 47.26% | 2.24 | €1,085.29 | +8.53% | 24.97% | +7.09u |
 | **8.0%** | 316 | 146 | 46.20% | 2.25 | €989.42 | -1.06% | 25.00% | -0.00u |
@@ -72,27 +72,27 @@ The table below illustrates the strategy's sensitivity across various EV thresho
 To evaluate tail risk and path dependency across thousands of possible trajectories, the C++ engine executes two complementary 10,000-iteration Monte Carlo procedures:
 
 #### Module A: Bootstrap Resampling (Sampling with Replacement)
-Simulates 10,000 alternative seasons by sampling 405 bets with replacement from the observed empirical trade distribution:
+Simulates 10,000 alternative seasons by sampling 421 bets with replacement from the observed empirical trade distribution:
 
 | Metric | Simulated Value | Risk Interpretation |
 | :--- | :---: | :--- |
 | **Probability of Ruin ($< €200$)** | **0.00%** | Zero runs breached the 80% loss barrier |
-| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€656.71** | Unfavorable variance regime over a full season |
-| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,117.53** | Central expectation aligns closely with realized +11.76% return |
-| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€1,864.65** | High-water mark under positive variance |
+| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€682.44** | Unfavorable variance regime over a full season |
+| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,154.87** | Central expectation aligns closely with realized +15.31% return |
+| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€1,982.92** | High-water mark under positive variance |
 | **Median Maximum Drawdown** | **26.84%** | Expected drawdown depth across simulated paths |
-| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **46.96%** | Drawdown boundary in adverse volatility regimes |
-| **Worst-Case Absolute Drawdown** | **68.30%** | Theoretical tail scenario across 4,050,000 total simulated wagers |
+| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **45.45%** | Drawdown boundary in adverse volatility regimes |
+| **Worst-Case Absolute Drawdown** | **70.32%** | Theoretical tail scenario across 4,210,000 total simulated wagers |
 
 #### Module B: Trade-Order Permutation (Reshuffling without Replacement)
-Quantifies sequence risk and losing-streak clustering by randomly shuffling the chronological order of the 405 observed historical bets:
+Quantifies sequence risk and losing-streak clustering by randomly shuffling the chronological order of the 421 observed historical bets:
 
 | Permutation Metric | Value | Risk Interpretation |
 | :--- | :---: | :--- |
-| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **18.33%** | Favorable dispersion of wins and losses |
-| **Median Drawdown ($50^{\text{th}}$ percentile)** | **26.12%** | Standard sequence-dependent drawdown |
-| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **37.47%** | Clustered adverse variance |
-| **Worst-Case Permutation Drawdown** | **52.01%** | Maximum clustering of losing bets in 10,000 random sequences |
+| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **18.00%** | Favorable dispersion of wins and losses |
+| **Median Drawdown ($50^{\text{th}}$ percentile)** | **25.57%** | Standard sequence-dependent drawdown |
+| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **36.85%** | Clustered adverse variance |
+| **Worst-Case Permutation Drawdown** | **51.51%** | Maximum clustering of losing bets in 10,000 random sequences |
 
 ### 4. Compiling and Running the C++ Engine
 

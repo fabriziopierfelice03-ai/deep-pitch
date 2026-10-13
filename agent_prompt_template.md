@@ -123,7 +123,7 @@ feature_56 = [
 Once `predict.py` generates calibrated probabilities via Bayesian Shrinkage, selections are evaluated against the strategy's quantitative filters:
 
 1. **Expected Value Threshold:**
-   $$\text{EV} = (P_{\text{calib}} \times \text{Odds}_{\text{Bookmaker}}) - 1 > +5.5\% \quad (+0.055)$$
+   $$\text{EV} = (P_{\text{calib}} \times \text{Odds}_{\text{Bookmaker}}) - 1 > +5.0\% \quad (+0.050)$$
 2. **Odds Filtering Range:**
    $$1.60 < \text{Odds}_{\text{Bookmaker}} < 3.10$$
 3. **Position Sizing (Quarter Kelly Criterion):**

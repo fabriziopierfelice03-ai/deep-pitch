@@ -260,13 +260,13 @@ int main() {
     }
     std::cout << "-------------------------------------------------------------------------\n\n";
 
-    // 2. Primary Execution on Target Strategy (EV > 5.5%)
-    const double TARGET_EV = 0.055;
+    // 2. Primary Execution on Target Strategy (EV > 5.0%)
+    const double TARGET_EV = 0.050;
     std::vector<PlayableBet> playable_bets;
     auto target_res = run_strategy(test_matches, TARGET_EV, &playable_bets);
 
     std::cout << "=========================================================================\n";
-    std::cout << "  TARGET STRATEGY BENCHMARK: EV > 5.5% (1.60 < Odds < 3.10, Max Cap 1.5%)\n";
+    std::cout << "  TARGET STRATEGY BENCHMARK: EV > 5.0% (1.60 < Odds < 3.10, Max Cap 1.5%)\n";
     std::cout << "=========================================================================\n";
     std::cout << "  ? Initial Capital:        EUR 1,000.00\n";
     std::cout << "  ? Total Bets Qualified:   " << target_res.total_bets << " (out of " << test_matches.size() << " test matches)\n";
