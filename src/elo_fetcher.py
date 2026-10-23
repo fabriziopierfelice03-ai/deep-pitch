@@ -34,7 +34,8 @@ ALIAS_MAP = {
     "tottenhamhotspur": "tottenham",
     "spurs": "tottenham",
     "newcastleunited": "newcastle",
-    "nottinghamforest": "nottingham",
+    "nottinghamforest": "forest",
+    "nottingham": "forest",
     "afcbournemouth": "bournemouth",
     "wolverhampton": "wolves",
     "wolverhamptonwanderers": "wolves",
@@ -45,11 +46,13 @@ ALIAS_MAP = {
     "athleticbilbao": "athbilbao",
     "atleticomadrid": "atletico",
     "atleticodemadrid": "atletico",
+    "atletico": "atletico",
     "celtavigo": "celta",
     "celtadevigo": "celta",
     "deportivoalaves": "alaves",
-    "deportivoacoruna": "depacoruna",
-    "deportivolacoruna": "depacoruna",
+    "deportivoacoruna": "depor",
+    "deportivolacoruna": "depor",
+    "depacoruna": "depor",
     "realsociedad": "sociedad",
     "realbetis": "betis",
     "rayovallecano": "vallecano",
@@ -57,7 +60,7 @@ ALIAS_MAP = {
     "bayernmunich": "bayern",
     "bayerleverkusen": "leverkusen",
     "borussiadortmund": "dortmund",
-    "borussiamonchengladbach": "mgladbach",
+    "borussiamonchengladbach": "gladbach",
     "eintrachtfrankfurt": "frankfurt",
     "scfreiburg": "freiburg",
     "tsghoffenheim": "hoffenheim",
@@ -65,15 +68,22 @@ ALIAS_MAP = {
     "mainz05": "mainz",
     "1fckoln": "koln",
     "fckoln": "koln",
+    "koln": "koln",
+    "cologne": "koln",
     "vfbstuttgart": "stuttgart",
     "hamburgersv": "hamburg",
-    "parissaintgermain": "psg",
+    "parissaintgermain": "parissg",
+    "psg": "parissg",
     "asmonaco": "monaco",
     "olympiquemarseille": "marseille",
     "olympique lyonnais": "lyon",
 }
 
 def strip_accents(text: str) -> str:
+    text = text.replace('\\u00e9', 'e').replace('u00e9', 'e')
+    text = text.replace('\\u00f6', 'o').replace('u00f6', 'o')
+    text = text.replace('\\u00fc', 'u').replace('u00fc', 'u')
+    text = text.replace('\\u00e4', 'a').replace('u00e4', 'a')
     return ''.join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
 
 def clean_key(name: str) -> str:
@@ -127,6 +137,14 @@ def scrape_live_clubelo() -> Dict[str, float]:
 
 _ELO_CACHE_MEM: Optional[Dict[str, float]] = None
 
+def _enrich_ratings(raw_dict: Dict[str, float]) -> Dict[str, float]:
+    enriched = dict(raw_dict)
+    for k, v in raw_dict.items():
+        ck = clean_key(k)
+        if ck not in enriched:
+            enriched[ck] = v
+    return enriched
+
 def load_live_elo_database(force_refresh: bool = False) -> Dict[str, float]:
     global _ELO_CACHE_MEM
     if not force_refresh and _ELO_CACHE_MEM is not None:
@@ -135,7 +153,7 @@ def load_live_elo_database(force_refresh: bool = False) -> Dict[str, float]:
         try:
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                _ELO_CACHE_MEM = data.get("ratings", {})
+                _ELO_CACHE_MEM = _enrich_ratings(data.get("ratings", {}))
                 return _ELO_CACHE_MEM
         except Exception:
             pass
@@ -148,7 +166,7 @@ def load_live_elo_database(force_refresh: bool = False) -> Dict[str, float]:
                 res = data.get("ratings", {})
         except Exception:
             pass
-    _ELO_CACHE_MEM = res
+    _ELO_CACHE_MEM = _enrich_ratings(res)
     return _ELO_CACHE_MEM
 def get_live_elo(team_name: str, fallback: float = 1650.0) -> float:
     ratings = load_live_elo_database()
