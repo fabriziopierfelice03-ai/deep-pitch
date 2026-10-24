@@ -1963,7 +1963,7 @@
       },
       {
         "id": "31250",
-        "isResult": false,
+        "isResult": true,
         "h": {
           "id": "285",
           "title": "Ipswich",
@@ -1975,14 +1975,19 @@
           "short_title": "NOT"
         },
         "goals": {
-          "h": null,
-          "a": null
+          "h": "1",
+          "a": "1"
         },
         "xG": {
-          "h": null,
-          "a": null
+          "h": "0.856862",
+          "a": "2.75509"
         },
-        "datetime": "2026-10-23 19:00:00"
+        "datetime": "2026-10-23 19:00:00",
+        "forecast": {
+          "w": "0.0528",
+          "d": "0.1209",
+          "l": "0.8263"
+        }
       },
       {
         "id": "31251",
@@ -12600,6 +12605,33 @@
             "loses": 1,
             "pts": 0,
             "npxGD": -0.16788999999999998
+          },
+          {
+            "h_a": "a",
+            "xG": 2.75509,
+            "xGA": 0.856862,
+            "npxG": 2.75509,
+            "npxGA": 0.856862,
+            "ppda": {
+              "att": 268,
+              "def": 21
+            },
+            "ppda_allowed": {
+              "att": 276,
+              "def": 19
+            },
+            "deep": 6,
+            "deep_allowed": 4,
+            "scored": 1,
+            "missed": 1,
+            "xpts": 2.5998,
+            "result": "d",
+            "date": "2026-10-23 19:00:00",
+            "wins": 0,
+            "draws": 1,
+            "loses": 0,
+            "pts": 1,
+            "npxGD": 1.898228
           }
         ]
       },
@@ -12795,6 +12827,33 @@
             "loses": 1,
             "pts": 0,
             "npxGD": -3.397361
+          },
+          {
+            "h_a": "h",
+            "xG": 0.856862,
+            "xGA": 2.75509,
+            "npxG": 0.856862,
+            "npxGA": 2.75509,
+            "ppda": {
+              "att": 276,
+              "def": 19
+            },
+            "ppda_allowed": {
+              "att": 268,
+              "def": 21
+            },
+            "deep": 4,
+            "deep_allowed": 6,
+            "scored": 1,
+            "missed": 1,
+            "xpts": 0.2793,
+            "result": "d",
+            "date": "2026-10-23 19:00:00",
+            "wins": 0,
+            "draws": 1,
+            "loses": 0,
+            "pts": 1,
+            "npxGD": -1.898228
           }
         ]
       },
@@ -14959,7 +15018,7 @@
       },
       {
         "id": "31638",
-        "isResult": false,
+        "isResult": true,
         "h": {
           "id": "113",
           "title": "Torino",
@@ -14971,14 +15030,19 @@
           "short_title": "MON"
         },
         "goals": {
-          "h": null,
-          "a": null
+          "h": "3",
+          "a": "2"
         },
         "xG": {
-          "h": null,
-          "a": null
+          "h": "1.44549",
+          "a": "0.441913"
         },
-        "datetime": "2026-10-23 18:45:00"
+        "datetime": "2026-10-23 18:45:00",
+        "forecast": {
+          "w": "0.6501",
+          "d": "0.2578",
+          "l": "0.0921"
+        }
       },
       {
         "id": "31631",
@@ -24816,6 +24880,33 @@
             "loses": 0,
             "pts": 3,
             "npxGD": 0.06079000000000012
+          },
+          {
+            "h_a": "h",
+            "xG": 1.44549,
+            "xGA": 0.441913,
+            "npxG": 1.44549,
+            "npxGA": 0.441913,
+            "ppda": {
+              "att": 263,
+              "def": 16
+            },
+            "ppda_allowed": {
+              "att": 250,
+              "def": 16
+            },
+            "deep": 8,
+            "deep_allowed": 5,
+            "scored": 3,
+            "missed": 2,
+            "xpts": 2.2081,
+            "result": "w",
+            "date": "2026-10-23 18:45:00",
+            "wins": 1,
+            "draws": 0,
+            "loses": 0,
+            "pts": 3,
+            "npxGD": 1.003577
           }
         ]
       },
@@ -25791,6 +25882,33 @@
             "loses": 0,
             "pts": 3,
             "npxGD": -0.8928100000000001
+          },
+          {
+            "h_a": "a",
+            "xG": 0.441913,
+            "xGA": 1.44549,
+            "npxG": 0.441913,
+            "npxGA": 1.44549,
+            "ppda": {
+              "att": 250,
+              "def": 16
+            },
+            "ppda_allowed": {
+              "att": 263,
+              "def": 16
+            },
+            "deep": 5,
+            "deep_allowed": 8,
+            "scored": 2,
+            "missed": 3,
+            "xpts": 0.5341,
+            "result": "l",
+            "date": "2026-10-23 18:45:00",
+            "wins": 0,
+            "draws": 0,
+            "loses": 1,
+            "pts": 0,
+            "npxGD": -1.003577
           }
         ]
       },
@@ -28505,7 +28623,7 @@
       },
       {
         "id": "30860",
-        "isResult": false,
+        "isResult": true,
         "h": {
           "id": "158",
           "title": "Alaves",
@@ -28517,14 +28635,19 @@
           "short_title": "MAL"
         },
         "goals": {
-          "h": null,
-          "a": null
+          "h": "1",
+          "a": "1"
         },
         "xG": {
-          "h": null,
-          "a": null
+          "h": "1.80426",
+          "a": "0.805685"
         },
-        "datetime": "2026-10-23 19:00:00"
+        "datetime": "2026-10-23 19:00:00",
+        "forecast": {
+          "w": "0.6641",
+          "d": "0.2382",
+          "l": "0.0977"
+        }
       },
       {
         "id": "30866",
@@ -35421,6 +35544,33 @@
             "loses": 1,
             "pts": 0,
             "npxGD": -0.6487099999999999
+          },
+          {
+            "h_a": "a",
+            "xG": 0.805685,
+            "xGA": 1.80426,
+            "npxG": 0.805685,
+            "npxGA": 1.80426,
+            "ppda": {
+              "att": 254,
+              "def": 18
+            },
+            "ppda_allowed": {
+              "att": 281,
+              "def": 36
+            },
+            "deep": 3,
+            "deep_allowed": 5,
+            "scored": 1,
+            "missed": 1,
+            "xpts": 0.5313,
+            "result": "d",
+            "date": "2026-10-23 19:00:00",
+            "wins": 0,
+            "draws": 1,
+            "loses": 0,
+            "pts": 1,
+            "npxGD": -0.998575
           }
         ]
       },
@@ -39546,6 +39696,33 @@
             "loses": 1,
             "pts": 0,
             "npxGD": 0.422963
+          },
+          {
+            "h_a": "h",
+            "xG": 1.80426,
+            "xGA": 0.805685,
+            "npxG": 1.80426,
+            "npxGA": 0.805685,
+            "ppda": {
+              "att": 281,
+              "def": 36
+            },
+            "ppda_allowed": {
+              "att": 254,
+              "def": 18
+            },
+            "deep": 5,
+            "deep_allowed": 3,
+            "scored": 1,
+            "missed": 1,
+            "xpts": 2.2305,
+            "result": "d",
+            "date": "2026-10-23 19:00:00",
+            "wins": 0,
+            "draws": 1,
+            "loses": 0,
+            "pts": 1,
+            "npxGD": 0.998575
           }
         ]
       },
@@ -41565,7 +41742,7 @@
       },
       {
         "id": "32302",
-        "isResult": false,
+        "isResult": true,
         "h": {
           "id": "133",
           "title": "VfB Stuttgart",
@@ -41577,14 +41754,19 @@
           "short_title": "BMG"
         },
         "goals": {
-          "h": null,
-          "a": null
+          "h": "2",
+          "a": "3"
         },
         "xG": {
-          "h": null,
-          "a": null
+          "h": "1.97918",
+          "a": "2.62544"
         },
-        "datetime": "2026-10-23 18:30:00"
+        "datetime": "2026-10-23 18:30:00",
+        "forecast": {
+          "w": "0.2216",
+          "d": "0.236",
+          "l": "0.5424"
+        }
       },
       {
         "id": "32295",
@@ -49038,6 +49220,33 @@
             "loses": 1,
             "pts": 0,
             "npxGD": -1.41296
+          },
+          {
+            "h_a": "a",
+            "xG": 2.62544,
+            "xGA": 1.97918,
+            "npxG": 2.62544,
+            "npxGA": 1.97918,
+            "ppda": {
+              "att": 387,
+              "def": 25
+            },
+            "ppda_allowed": {
+              "att": 143,
+              "def": 14
+            },
+            "deep": 3,
+            "deep_allowed": 6,
+            "scored": 3,
+            "missed": 2,
+            "xpts": 1.8632,
+            "result": "w",
+            "date": "2026-10-23 18:30:00",
+            "wins": 1,
+            "draws": 0,
+            "loses": 0,
+            "pts": 3,
+            "npxGD": 0.6462600000000003
           }
         ]
       },
@@ -49374,6 +49583,33 @@
             "loses": 1,
             "pts": 0,
             "npxGD": 0.9681300000000002
+          },
+          {
+            "h_a": "h",
+            "xG": 1.97918,
+            "xGA": 2.62544,
+            "npxG": 1.97918,
+            "npxGA": 2.62544,
+            "ppda": {
+              "att": 143,
+              "def": 14
+            },
+            "ppda_allowed": {
+              "att": 387,
+              "def": 25
+            },
+            "deep": 6,
+            "deep_allowed": 3,
+            "scored": 2,
+            "missed": 3,
+            "xpts": 0.9007999999999999,
+            "result": "l",
+            "date": "2026-10-23 18:30:00",
+            "wins": 0,
+            "draws": 0,
+            "loses": 1,
+            "pts": 0,
+            "npxGD": -0.6462600000000003
           }
         ]
       },
@@ -52155,7 +52391,7 @@
       },
       {
         "id": "32005",
-        "isResult": false,
+        "isResult": true,
         "h": {
           "id": "241",
           "title": "Brest",
@@ -52167,14 +52403,19 @@
           "short_title": "NIC"
         },
         "goals": {
-          "h": null,
-          "a": null
+          "h": "1",
+          "a": "2"
         },
         "xG": {
-          "h": null,
-          "a": null
+          "h": "2.11691",
+          "a": "0.689003"
         },
-        "datetime": "2026-10-23 18:45:00"
+        "datetime": "2026-10-23 18:45:00",
+        "forecast": {
+          "w": "0.7664",
+          "d": "0.1714",
+          "l": "0.0622"
+        }
       },
       {
         "id": "32010",
@@ -58911,6 +59152,33 @@
             "loses": 1,
             "pts": 0,
             "npxGD": -0.5111100000000002
+          },
+          {
+            "h_a": "a",
+            "xG": 0.689003,
+            "xGA": 2.11691,
+            "npxG": 0.689003,
+            "npxGA": 1.34652,
+            "ppda": {
+              "att": 284,
+              "def": 28
+            },
+            "ppda_allowed": {
+              "att": 269,
+              "def": 20
+            },
+            "deep": 1,
+            "deep_allowed": 6,
+            "scored": 2,
+            "missed": 1,
+            "xpts": 0.358,
+            "result": "w",
+            "date": "2026-10-23 18:45:00",
+            "wins": 1,
+            "draws": 0,
+            "loses": 0,
+            "pts": 3,
+            "npxGD": -0.6575169999999999
           }
         ]
       },
@@ -60471,6 +60739,33 @@
             "loses": 0,
             "pts": 1,
             "npxGD": -0.5023629999999999
+          },
+          {
+            "h_a": "h",
+            "xG": 2.11691,
+            "xGA": 0.689003,
+            "npxG": 1.34652,
+            "npxGA": 0.689003,
+            "ppda": {
+              "att": 269,
+              "def": 20
+            },
+            "ppda_allowed": {
+              "att": 284,
+              "def": 28
+            },
+            "deep": 6,
+            "deep_allowed": 1,
+            "scored": 1,
+            "missed": 2,
+            "xpts": 2.4706,
+            "result": "l",
+            "date": "2026-10-23 18:45:00",
+            "wins": 0,
+            "draws": 0,
+            "loses": 1,
+            "pts": 0,
+            "npxGD": 0.6575169999999999
           }
         ]
       },

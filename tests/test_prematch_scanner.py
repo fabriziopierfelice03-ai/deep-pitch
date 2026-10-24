@@ -30,7 +30,7 @@ class TestPrematchScanner(unittest.TestCase):
         res = run_prematch_scan(current_date=friday_date)
         self.assertEqual(res["status"], "COMPLETED")
         self.assertEqual(res["total_matches"], 48)
-        self.assertEqual(len(res["qualified_bets"]), 10)
+        self.assertEqual(len(res["qualified_bets"]), 9)
         
         bankroll = get_active_bankroll()
         self.assertGreater(bankroll, 0.0)

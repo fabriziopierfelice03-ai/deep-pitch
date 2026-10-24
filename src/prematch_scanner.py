@@ -72,7 +72,7 @@ FIXTURES_WEEKEND = [
     {'league': 'SP1', 'date': '25/10/26', 'home': 'Athletic Club', 'away': 'Getafe', 'odds': [1.68, 3.65, 5.35]},
     {'league': 'SP1', 'date': '25/10/26', 'home': 'Celta Vigo', 'away': 'Real Betis', 'odds': [2.65, 3.30, 2.65]},
     {'league': 'SP1', 'date': '25/10/26', 'home': 'Real Sociedad', 'away': 'Levante', 'odds': [1.64, 3.80, 5.40]},
-    {'league': 'SP1', 'date': '25/10/26', 'home': 'Barcelona', 'away': 'Real Madrid', 'odds': [2.25, 3.60, 2.95]},
+    {'league': 'SP1', 'date': '25/10/26', 'home': 'Barcelona', 'away': 'Real Madrid', 'odds': [1.60, 4.20, 5.00]},
     {'league': 'SP1', 'date': '26/10/26', 'home': 'Sevilla', 'away': 'Osasuna', 'odds': [1.95, 3.30, 4.05]},
 
     # Bundesliga (D1) - 9 Match
