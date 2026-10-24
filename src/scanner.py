@@ -51,52 +51,10 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 TRACKING_CSV = os.path.join(BASE_DIR, "tracking_2026_2027.csv")
 
-# Verified Elo Database (96 European Clubs)
-ELO_RATINGS = {
-    # Premier League
-    "manchestercity": 1960.0, "arsenal": 1920.0, "liverpool": 1890.0, "chelsea": 1840.0,
-    "manchesterunited": 1820.0, "tottenham": 1780.0, "tottenhamhotspur": 1780.0, "newcastle": 1790.0,
-    "newcastleunited": 1790.0, "astonvilla": 1750.0, "brentford": 1745.0, "brighton": 1760.0,
-    "brightonandhovealbion": 1760.0, "bournemouth": 1675.0, "afcbournemouth": 1675.0,
-    "everton": 1710.0, "crystalpalace": 1700.0, "fulham": 1710.0, "nottingham": 1680.0,
-    "nottinghamforest": 1680.0, "leeds": 1690.0, "leedsunited": 1690.0, "sunderland": 1640.0,
-    "hull": 1650.0, "hullcity": 1650.0, "ipswich": 1640.0, "ipswichtown": 1640.0, "coventry": 1630.0,
-    "coventrycity": 1630.0,
+from src.elo_fetcher import get_live_elo
 
-    # Serie A
-    "inter": 1890.0, "juventus": 1840.0, "atalanta": 1830.0, "milan": 1810.0, "acmilan": 1810.0,
-    "napoli": 1810.0, "roma": 1780.0, "asroma": 1780.0, "lazio": 1765.0, "bologna": 1730.0,
-    "fiorentina": 1740.0, "torino": 1690.0, "udinese": 1670.0, "genoa": 1680.0, "como": 1680.0,
-    "monza": 1660.0, "parma": 1650.0, "parmacalcio1913": 1650.0, "lecce": 1640.0, "sassuolo": 1650.0,
-    "cagliari": 1640.0, "venezia": 1620.0, "frosinone": 1620.0,
-
-    # La Liga
-    "realmadrid": 1970.0, "barcelona": 1930.0, "atleticomadrid": 1840.0, "atleticodemadrid": 1840.0,
-    "realsociedad": 1770.0, "athleticclub": 1790.0, "athleticbilbao": 1790.0, "villarreal": 1770.0,
-    "betis": 1750.0, "realbetis": 1750.0, "sevilla": 1740.0, "valencia": 1710.0, "celtavigo": 1700.0,
-    "celtadevigo": 1700.0, "osasuna": 1690.0, "espanyol": 1680.0, "alaves": 1670.0, "deportivoalaves": 1670.0,
-    "rayovallecano": 1680.0, "getafe": 1670.0, "deportivoacoruna": 1660.0, "deportivolacoruna": 1660.0,
-    "elche": 1630.0, "malaga": 1640.0, "racingsantander": 1640.0, "levante": 1640.0,
-
-    # Bundesliga
-    "bayernmunchen": 1940.0, "bayernmunich": 1940.0, "bayerleverkusen": 1880.0, "leverkusen": 1880.0,
-    "borussiadortmund": 1840.0, "dortmund": 1840.0, "rbleipzig": 1820.0, "rasenballsportleipzig": 1820.0,
-    "vfbstuttgart": 1780.0, "stuttgart": 1780.0, "eintrachtfrankfurt": 1760.0, "frankfurt": 1760.0,
-    "freiburg": 1740.0, "scfreiburg": 1740.0, "tsghoffenheim": 1720.0, "hoffenheim": 1720.0,
-    "unionberlin": 1720.0, "1fcunionberlin": 1720.0, "mainz": 1710.0, "mainz05": 1710.0,
-    "borussiamonchengladbach": 1710.0, "borussiamgladbach": 1710.0, "werderbremen": 1690.0,
-    "augsburg": 1680.0, "fcaugsburg": 1680.0, "1fckoln": 1670.0, "fckoln": 1670.0, "fccologne": 1670.0,
-    "hamburgersv": 1670.0, "hamburg": 1670.0, "schalke": 1620.0, "schalke04": 1620.0,
-    "elversberg": 1600.0, "paderborn": 1600.0,
-
-    # Ligue 1
-    "parissaintgermain": 1880.0, "psg": 1880.0, "monaco": 1800.0, "asmonaco": 1800.0,
-    "marseille": 1775.0, "olympiquemarseille": 1775.0, "lille": 1770.0, "lyon": 1760.0,
-    "olympiquelyonnais": 1760.0, "rennes": 1730.0, "nice": 1740.0, "lens": 1730.0,
-    "strasbourg": 1700.0, "brest": 1710.0, "toulouse": 1690.0, "parisfc": 1670.0,
-    "auxerre": 1650.0, "lehavre": 1640.0, "angers": 1630.0, "lorient": 1640.0,
-    "troyes": 1620.0, "lemans": 1610.0
-}
+def get_elo(team_name: str) -> float:
+    return get_live_elo(team_name, fallback=1650.0)
 
 LEAGUE_CONFIG = {
     'E0': {'name': 'Premier League', 'fotmob_id': '47', 'slug': 'premier-league', 'betexp_url': 'https://www.betexplorer.com/football/england/premier-league/fixtures/', 'teams': 20, 'ucl': 4, 'uel': 6, 'rel': 18},
@@ -112,15 +70,6 @@ def strip_accents(text: str) -> str:
 def norm_team(name: str) -> str:
     name = strip_accents(name.lower())
     return re.sub(r'[^a-z0-9]', '', name)
-
-def get_elo(team_name: str) -> float:
-    key = norm_team(team_name)
-    if key in ELO_RATINGS:
-        return ELO_RATINGS[key]
-    for k, v in ELO_RATINGS.items():
-        if k in key or key in k:
-            return v
-    return 1700.0
 
 def get_current_bankroll() -> float:
     if not os.path.exists(TRACKING_CSV):
