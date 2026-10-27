@@ -14,7 +14,7 @@ Data Ingestion & Integrity:
 - Official league standings (points, positions, UCL/UEL/Relegation cutoffs)
 - Exact calendar rest days and matches in last 14 days
 - Finished H2H history
-- Static verified Elo database (96 European clubs)
+- Live official ClubElo rating ingestion (ClubElo.com)
 - Shin (1993) De-Vigging + Bayesian Shrinkage Layer (55.1% Model, 44.9% Market)
 - Money Management: Quarter-Kelly Criterion (cap 1.5%) on active bankroll
 
@@ -196,7 +196,7 @@ def get_standings_context(league_code: str, home_name: str, away_name: str, stan
         away_points=float(a_pts),
         home_dist_ucl=float(h_pts - ucl_pts),
         away_dist_ucl=float(a_pts - ucl_pts),
-        home_dist_uel=float(h_pts - ucl_pts),
+        home_dist_uel=float(h_pts - uel_pts),
         away_dist_uel=float(a_pts - uel_pts),
         home_dist_rel=float(h_pts - rel_pts),
         away_dist_rel=float(a_pts - rel_pts),
