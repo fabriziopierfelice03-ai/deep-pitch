@@ -396,8 +396,19 @@ def run_matchday_scan(mode: str = "auto") -> Dict[str, Any]:
             continue
         all_m = data['pageProps']['fixtures'].get('allMatches', [])
         
-        # Select unplayed matches within next 4 days
+        # Dynamic lookahead window:
+        # Midweek scan (Mon-Wed): evaluate strictly midweek fixtures up to Thursday (delta_days <= 2)
+        # Thursday scan: up to Friday (delta_days <= 1)
+        # Weekend scan (Fri-Sun): evaluate weekend fixtures up to Monday (delta_days <= 3)
         now_dt = datetime.now(timezone.utc)
+        weekday = now_dt.weekday()
+        if weekday in (0, 1, 2):
+            max_lookahead = 2
+        elif weekday == 3:
+            max_lookahead = 1
+        else:
+            max_lookahead = 3
+
         for m in all_m:
             st = m.get('status', {})
             if st.get('finished', False):
@@ -407,9 +418,8 @@ def run_matchday_scan(mode: str = "auto") -> Dict[str, Any]:
                 continue
             try:
                 m_dt = datetime.fromisoformat(utc_time.replace('Z', '+00:00'))
-                # Match window: within next 4.5 days
                 delta_days = (m_dt.date() - now_dt.date()).days
-                if 0 <= delta_days <= 4:
+                if 0 <= delta_days <= max_lookahead:
                     target_fixtures.append({
                         'league': lcode,
                         'fotmob_id': str(m.get('id')),

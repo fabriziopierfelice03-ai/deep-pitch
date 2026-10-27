@@ -146,6 +146,7 @@ def load_live_elo_database(force_refresh: bool = False) -> Dict[str, float]:
             with open(CACHE_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 res = data.get("ratings", {})
+            os.utime(CACHE_FILE, None)
         except Exception:
             pass
     _ELO_CACHE_MEM = res
