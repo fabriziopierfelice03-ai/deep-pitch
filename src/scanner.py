@@ -132,9 +132,19 @@ def scrape_betexplorer_odds(url: str) -> Dict[str, Tuple[float, float, float]]:
         print(f"  [WARN] Impossibile scaricare quote da {url}: {e}")
     return odds_map
 
+BETEXP_ALIASES = {
+    "manchesterunited": "manchesterutd",
+    "atleticomadrid": "atlmadrid",
+    "athleticclub": "athbilbao",
+    "deportivoacoruna": "depacoruna",
+    "borussiamonchengladbach": "bmonchengladbach",
+    "bayernmunchen": "bayernmunich",
+    "parissaintgermain": "psg",
+}
+
 def find_matched_odds(home_name: str, away_name: str, odds_map: Dict[str, Tuple[float, float, float]]) -> Optional[Tuple[float, float, float]]:
-    h_k = norm_team(home_name)
-    a_k = norm_team(away_name)
+    h_k = BETEXP_ALIASES.get(norm_team(home_name), norm_team(home_name))
+    a_k = BETEXP_ALIASES.get(norm_team(away_name), norm_team(away_name))
     direct_key = f"{h_k}_{a_k}"
     if direct_key in odds_map:
         return odds_map[direct_key]
