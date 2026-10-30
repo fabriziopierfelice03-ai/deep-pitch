@@ -10,6 +10,7 @@ The framework operates on a **modernized dual-stack quantitative architecture**:
 3. **100% Blind Out-of-Sample Test Set Validation:** Validated on **1,627 untouched out-of-sample fixtures** (10% temporal split), achieving **+15.31% net ROI** across 421 qualified bets at $\text{EV} > 5.0\%$ with a **22.81% maximum drawdown**.
 4. **High-Performance Simulation & Execution Engine (C++20):** An ultra-fast, cache-friendly native backtester featuring a **10,000-run Monte Carlo stress test** (Bootstrap resampling and trade-order permutation) executing 16,000+ fixtures in milliseconds.
 5. **Live Empirical Audit:** Transparent pre-match paper trading tracked in real time for the 2026/2027 season with zero lookahead bias.
+6. **Autonomous Live In-Play Risk Sentinel (C++20):** High-frequency microstructure and economic state machine hedging live positions into guaranteed risk-free profits (Green Book) with millisecond Telegram dispatch and automatic tracking sync.
 
 ---
 
@@ -183,6 +184,60 @@ Every match vector is deterministically assembled into the exact 56-feature layo
 | `[40 - 45]` | **Table Pressure** | Point distances to Champions League, Europa League, and Relegation zones |
 | `[46 - 47]` | **Season Progression** | Current round/matchday number and season half (`1` for 1–19, `2` for 20–38) |
 | `[48 - 55]` | **In-Game Event Averages** | Weighted average shots, shots on target, corners, and cards over the last 5 matches |
+
+---
+
+## 🛡️ Live Execution & In-Play Risk Sentinel (C++20 Engine)
+
+While pre-match predictive models identify structural bookmaker mispricings, holding open wagers passively until the 95th minute exposes accumulated equity to extreme late-game variance (stoppage-time equalizers, late red cards, defensive collapses, VAR reversals).
+
+To systematically address this, DeepPitch is integrated with **Live Sentinel**, an autonomous, low-latency C++20 in-play trade liquidation engine that dynamically locks guaranteed, risk-free profits (**Green Book / Freebet**) using live bookmaker odds feeds:
+
+```text
+[ DeepPitch Pre-Match Bet ] ──► [ Kambi CDN 1Hz Live Odds Stream ]
+                                            │
+                                            ▼
+                             [ Live Sentinel C++20 Daemon ]
+                                            │
+              ┌─────────────────────────────┴─────────────────────────────┐
+              ▼                                                           ▼
+    [ Level 1: Economic Gate ]                                  [ Time Boundaries ]
+    Continuous Activation A(t) >= 0.50                          • t < 30': Blind Phase (HOLD)
+    Evaluates Cashout C(t) vs Risk Capital                      • 30' <= t <= 80': Active Trading
+              │                                                 • t > 80': Hold To Expiry
+              ▼ (If Armed)
+    [ Level 2: Microstructure Engine ]
+    ├── Track A: Extreme Asymmetry Bypass (O(t) <= 1.05 or Profit Capture >= 90% for t <= 75')
+    └── Track B: 4-Minute Rolling Velocity & Pressure Engine
+          ├── V <= -0.010: Dominance Decay ────────► HOLD (Let Profits Run)
+          ├── -0.005 <= V <= +0.025: Stasis Regime (>= 60s) ──► TRIGGER GREEN BOOK
+          ├── Delta_O > +0.15 or V > +0.030: Circuit Breaker ──► FREEZE (Anti-Panic)
+          └── Delta_O < -0.15 or Bookmaker Suspension ────────► Buffer Flush
+              │
+              ▼
+    [ Post-Execution Pipeline ]
+    ├── Mathematical Green Book Hedge: S2 = (S1 * O1) / O2 (0.50€ Rounding Guard)
+    ├── Atomic Update to tracking_2026_2027.csv & live_hedge_audit.csv
+    ├── Automated Git Sync & Push to GitHub
+    └── Sub-Second Push Notification via Native Telegram Bot (WinHTTP)
+```
+
+### 1. Mathematical Green Book Hedging
+For traditional sportsbooks (0% exchange commission), given initial stake $S_0$ placed at pre-match odds $O_0$ and live opposing market odds $O_{\text{opp}}(t)$ (e.g., Double Chance $X2$ when holding Home $1$):
+
+$$S_{\text{hedge}} = \text{round}_{0.50}\left(\frac{S_0 \cdot O_0}{O_{\text{opp}}(t)}\right), \quad \text{Locked Profit} = (S_0 \cdot O_0) - S_0 - S_{\text{hedge}} > 0$$
+
+A strict **Red Book Guard** prevents execution if $O_{\text{opp}}(t) < \frac{O_0}{O_0 - 1}$ (the analytical break-even threshold).
+
+### 2. Two-Level State Machine
+* **Level 1 (Economic Activation Filter):** Evaluates if the ratio between extractable equity $C(t)$ and capital at risk justifies early exit via a continuous sigmoidal function:
+  $$A(t) = \frac{1}{1 + \exp\left(-15 \cdot \left[ \left(\frac{t}{90}\right)^{1.6} \cdot \ln\left(\frac{P_{\text{max}}}{P_{\text{max}} - C(t)}\right) \cdot \left(1 - \frac{1}{O_0}\right) - 0.20 \right]\right)}$$
+  If $A(t) \ge 0.50$, the system enters the **ARMED** state and evaluates microstructure dynamics.
+* **Level 2 Track A (Extreme Asymmetry Bypass):** If $O(t) \le 1.05$ or profit capture $\ge 90\%$ before the 75th minute, the position is liquidated immediately without waiting for tick confirmation.
+* **Level 2 Track B (Microstructure Velocity & Pressure Monitoring):** Maintains a 240-second circular tick buffer computing live price velocity $V = \frac{O(t) - O(t - 4')}{4}$. While normal decay ($V \le -0.010$) allows profits to run, a stagnation/pressure regime ($-0.005 \le V \le +0.025$) sustained for 60–90 consecutive seconds signals imminent danger and triggers an immediate Green Book order.
+
+> [!NOTE]
+> **Proprietary Execution Architecture:** While DeepPitch maintains the open-source statistical research, machine learning models, and public paper trading audits, the low-latency C++20 live execution engine (`Live Sentinel`) is decoupled into a dedicated private repository (`live-sentinel`) to protect proprietary execution alpha.
 
 ---
 
