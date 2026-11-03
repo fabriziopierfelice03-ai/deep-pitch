@@ -29,6 +29,7 @@ import json
 import re
 import urllib.request
 import unicodedata
+import subprocess
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -84,6 +85,196 @@ def get_current_bankroll() -> float:
     except Exception:
         pass
     return 1000.0
+
+def format_date_for_tracking(raw_date: str) -> str:
+    """Converts ISO or YYYY-MM-DD date string to DD/MM/YY format required by tracking CSV."""
+    try:
+        if 'T' in raw_date:
+            dt = datetime.fromisoformat(raw_date.replace('Z', '+00:00'))
+        elif '-' in raw_date:
+            dt = datetime.strptime(raw_date[:10], "%Y-%m-%d")
+        elif '/' in raw_date:
+            return raw_date[:8]
+        else:
+            return raw_date[:10]
+        return dt.strftime("%d/%m/%y")
+    except Exception:
+        return raw_date[:10]
+
+def load_existing_tracking_keys(csv_path: str = TRACKING_CSV) -> set:
+    """Reads existing (Date, Match, Bet) tuples from tracking CSV for idempotency."""
+    if not os.path.exists(csv_path):
+        return set()
+    keys = set()
+    try:
+        import csv
+        with open(csv_path, 'r', encoding='utf-8', errors='ignore') as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            for row in reader:
+                if len(row) >= 4:
+                    date_val = row[0].strip()
+                    match_val = norm_team(row[2].strip())
+                    bet_val = row[3].strip()
+                    keys.add((date_val, match_val, bet_val))
+    except Exception:
+        pass
+    return keys
+
+def append_bets_to_tracking(qualified_bets: List[Dict[str, Any]], csv_path: str = TRACKING_CSV) -> List[Dict[str, Any]]:
+    """Appends newly qualified bets to tracking CSV, skipping duplicates."""
+    existing_keys = load_existing_tracking_keys(csv_path)
+    new_bets = []
+    
+    if not os.path.exists(csv_path):
+        return []
+
+    lines_to_append = []
+    for b in qualified_bets:
+        date_csv = format_date_for_tracking(b.get('date', ''))
+        b['date_csv'] = date_csv
+        
+        match_title = b.get('match', '').replace(" - ", "-").strip()
+        b['match_clean'] = match_title
+        
+        sel = str(b.get('selection', '')).strip()
+        key = (date_csv, norm_team(match_title), sel)
+        
+        if key in existing_keys:
+            continue
+            
+        existing_keys.add(key)
+        new_bets.append(b)
+        
+        # Line format: Date,League,Match,Bet,Bookmaker_odds,Model_probability,Fair_odds,EV_Perc,Stake_euro,Result,Profit,Bankroll
+        line = (
+            f"{date_csv},"
+            f"{b['league']},"
+            f"{match_title},"
+            f"{sel},"
+            f"{b['bookmaker_odds']:.2f},"
+            f"{b['model_prob']:.1f}%,"
+            f"{b['fair_odds']:.2f},"
+            f"{b['ev_perc']:.2f},"
+            f"{b['stake_eur']:.2f},"
+            f",,\n"
+        )
+        lines_to_append.append(line)
+        
+    if lines_to_append:
+        with open(csv_path, 'a', encoding='utf-8') as f:
+            for l in lines_to_append:
+                f.write(l)
+        print(f"[*] [TRACKING] Aggiunte {len(lines_to_append)} nuove selezioni a {csv_path}")
+    else:
+        print("[*] [TRACKING] Nessuna nuova selezione da aggiungere (tutte gia' tracciate o 0 qualificate).")
+        
+    return new_bets
+
+def git_commit_and_push(csv_path: str = TRACKING_CSV, count: int = 0) -> bool:
+    """Commits and pushes updated tracking CSV to GitHub origin main."""
+    repo_dir = os.path.dirname(os.path.abspath(csv_path))
+    try:
+        subprocess.run(["git", "-C", repo_dir, "add", "tracking_2026_2027.csv"], check=True)
+        msg = f"scan: auto-added {count} new qualified picks for upcoming matchday"
+        subprocess.run(["git", "-C", repo_dir, "commit", "-m", msg], check=True)
+        subprocess.run(["git", "-C", repo_dir, "push", "origin", "main"], check=True)
+        print(f"[*] [GIT] Committato e sincronizzato con successo su GitHub: {msg}")
+        return True
+    except Exception as e:
+        print(f"[!] [GIT] Warning push: {e}")
+        return False
+
+def get_telegram_credentials() -> Tuple[Optional[str], Optional[str]]:
+    """Loads Telegram bot token and chat ID from environment or bot.env files."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if token and chat_id:
+        return token, chat_id
+        
+    candidates = [
+        os.path.join(BASE_DIR, "bot.env"),
+        os.path.join(BASE_DIR, ".env"),
+        os.path.abspath(os.path.join(BASE_DIR, "..", "live-sentinel", "bot.env")),
+        os.path.abspath(os.path.join(BASE_DIR, "..", "live-sentinel", ".env")),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("TELEGRAM_BOT_TOKEN="):
+                            token = line.split("=", 1)[1].strip(" \"'")
+                        elif line.startswith("TELEGRAM_CHAT_ID="):
+                            chat_id = line.split("=", 1)[1].strip(" \"'")
+                if token and chat_id:
+                    return token, chat_id
+            except Exception:
+                pass
+    return token, chat_id
+
+def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, scan_summary: Dict[str, Any]) -> bool:
+    """Sends comprehensive Telegram notification of newly added pre-match picks."""
+    token, chat_id = get_telegram_credentials()
+    if not token or not chat_id:
+        print("[!] [TELEGRAM] Token o Chat ID non trovati (notifica saltata).")
+        return False
+
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    
+    if not new_bets:
+        msg = (
+            f"🎯 *DEEP PITCH | SCANSIONE PRE-MATCH COMPLETATA*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📅 Scansione: *{now_str}*\n"
+            f"💰 Bankroll Attivo: *€{bankroll:.2f}*\n"
+            f"🔍 Match analizzati: *{scan_summary.get('evaluated_fixtures', 0)}* (Top 5 Leghe)\n"
+            f"ℹ️ *Nessuna nuova value bet identificata con EV ≥ +5.0%* per questo turno.\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛡️ _Nessun rischio assunto. Capitale preservato al 100%._"
+        )
+    else:
+        msg_lines = [
+            f"🎯 *DEEP PITCH | NUOVE VALUE BET IDENTIFICATE*",
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"📅 Scansione: *{now_str}*",
+            f"💰 Bankroll Attivo: *€{bankroll:.2f}*",
+            f"🔍 Match analizzati: *{scan_summary.get('evaluated_fixtures', 0)}* (Top 5 Leghe)",
+            f"✨ Nuove selezioni qualificate: *{len(new_bets)}*\n"
+        ]
+        
+        for b in new_bets:
+            msg_lines.extend([
+                f"⚽ *{b['match_clean']}*",
+                f"• Lega: *{b['league']}* | Data: *{b['date_csv']}*",
+                f"• Segno: *{b['selection']}* @ *{b['bookmaker_odds']:.2f}* (Fair: {b['fair_odds']:.2f})",
+                f"• Prob. Modello: *{b['model_prob']:.1f}%* | EV: *+{b['ev_perc']:.2f}%*",
+                f"• Stake Quarter-Kelly: *€{b['stake_eur']:.2f}* ({b['applied_fraction']:.2f}%)\n"
+            ])
+            
+        msg_lines.extend([
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"✅ _Aggiunte automaticamente su tracking_2026_2027.csv e sincronizzate su GitHub._",
+            f"🛡️ _Live Sentinel monitorera' le partite in tempo reale per la copertura Green Book._"
+        ])
+        msg = "\n".join(msg_lines)
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = json.dumps({
+        "chat_id": chat_id,
+        "text": msg,
+        "parse_mode": "Markdown"
+    }).encode("utf-8")
+    
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print("[*] [TELEGRAM] Notifica inviata con successo sul tuo smartphone.")
+            return resp.status == 200
+    except Exception as e:
+        print(f"[!] [TELEGRAM] Errore invio messaggio: {e}")
+        return False
 
 def fetch_json(url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
@@ -370,7 +561,7 @@ def compute_rest_and_fatigue(fixture_time_str: str, match_records: List[MatchRec
     matches_14d = float(sum(1 for d in dates if 0 < (fix_dt.date() - d.date()).days <= 14))
     return rest_days, matches_14d
 
-def run_matchday_scan(mode: str = "auto") -> Dict[str, Any]:
+def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, Any]:
     """
     Main scanner execution routine.
     - mode='auto': Automatically detects matches in the upcoming 4-day window.
@@ -602,7 +793,7 @@ def run_matchday_scan(mode: str = "auto") -> Dict[str, Any]:
     if len(qualified_1x2_bets) > 12:
         print("\n[ALERT] Rilevato volume anomalo di selezioni (> 12). Controllo di sicurezza attivato.")
 
-    return {
+    res = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "current_bankroll": current_bankroll,
         "evaluated_fixtures": len(target_fixtures) - skipped_no_odds,
@@ -611,5 +802,20 @@ def run_matchday_scan(mode: str = "auto") -> Dict[str, Any]:
         "qualified_dnb_bets": qualified_dnb_bets
     }
 
+    if publish:
+        print("\n==========================================================================")
+        print("          PUBBLICAZIONE AUTOMATICA & SINCRONIZZAZIONE (--publish)")
+        print("==========================================================================")
+        newly_added = append_bets_to_tracking(qualified_1x2_bets, TRACKING_CSV)
+        if newly_added:
+            git_commit_and_push(TRACKING_CSV, len(newly_added))
+        send_telegram_scan_digest(newly_added, current_bankroll, res)
+
+    return res
+
 if __name__ == "__main__":
-    run_matchday_scan()
+    import argparse
+    parser = argparse.ArgumentParser(description="Deep Pitch Pre-Match Value Scanner")
+    parser.add_argument("--publish", action="store_true", help="Append new qualified picks to tracking CSV, push to GitHub and send Telegram digest")
+    args = parser.parse_args()
+    run_matchday_scan(publish=args.publish)
