@@ -80,4 +80,4 @@ Date,League,Match,Bet,Bookmaker_odds,Model_probability,Fair_odds,EV_Perc,Stake_e
 08/11/26,I1,Monza-Atalanta,2,2.08,52.5%,1.90,9.22,15.76,2,+17.02,1072.02
 08/11/26,SP1,Atlético Madrid-Barcelona,2,1.82,58.8%,1.70,7.00,15.76,,,
 08/11/26,E0,Sunderland-Chelsea,2,1.94,54.6%,1.83,5.90,15.76,1,-15.76,1056.26
-08/11/26,D1,Hoffenheim-Schalke 04,1,1.61,65.8%,1.52,5.87,15.76,,,
+08/11/26,D1,Hoffenheim-Schalke 04,1,1.61,65.8%,1.52,5.87,15.76,1,+9.61,1065.87
