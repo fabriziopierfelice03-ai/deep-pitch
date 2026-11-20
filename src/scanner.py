@@ -276,25 +276,25 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
         print(f"[!] [TELEGRAM] Errore invio messaggio: {e}")
         return False
 
-def fetch_json(url: str, timeout: int = 10) -> Optional[Dict[str, Any]]:
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+def fetch_json(url: str, timeout: int = 15) -> Optional[Dict[str, Any]]:
+    req = urllib.request.Request(
+        url,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Accept': 'application/json'
+        }
+    )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode('utf-8'))
-    except Exception as e:
+    except Exception:
         return None
 
-def get_live_fotmob_build_id() -> str:
-    req = urllib.request.Request('https://www.fotmob.com', headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode('utf-8')
-            m = re.search(r'"buildId":"([^"]+)"', html)
-            if m:
-                return m.group(1)
-    except Exception:
-        pass
-    return "3o2nRZL0XlDGSxF5oZXd6"
+def extract_page_props(data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Normalizes FotMob payloads (supports legacy Next.js pageProps cache and direct /api/data/* responses)."""
+    if not data:
+        return {}
+    return data.get('pageProps', data)
 
 def scrape_betexplorer_odds(url: str) -> Dict[str, Tuple[float, float, float]]:
     """Scrapes authentic consensus decimal odds from BetExplorer fixture page."""
@@ -346,15 +346,16 @@ def find_matched_odds(home_name: str, away_name: str, odds_map: Dict[str, Tuple[
                 return v
     return None
 
-def fetch_league_standings(league_code: str, build_id: str) -> Dict[str, Dict[str, float]]:
+def fetch_league_standings(league_code: str, league_data: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, float]]:
     conf = LEAGUE_CONFIG[league_code]
-    lid, slug = conf['fotmob_id'], conf['slug']
-    u = f"https://www.fotmob.com/_next/data/{build_id}/en/leagues/{lid}/overview/{slug}.json"
-    data = fetch_json(u)
+    if league_data is None:
+        u = f"https://www.fotmob.com/api/data/leagues?id={conf['fotmob_id']}"
+        league_data = fetch_json(u)
+    props = extract_page_props(league_data)
     standings_map = {}
-    if data and 'pageProps' in data and 'table' in data['pageProps']:
+    if 'table' in props and props['table']:
         try:
-            raw_all = data['pageProps']['table'][0].get('data', {}).get('table', {}).get('all', [])
+            raw_all = props['table'][0].get('data', {}).get('table', {}).get('all', [])
             pts_by_idx = {t.get('idx'): t.get('pts', 0) for t in raw_all}
             ucl_pts = pts_by_idx.get(conf['ucl'], 12)
             uel_pts = pts_by_idx.get(conf['uel'], 10)
@@ -405,7 +406,7 @@ def get_standings_context(league_code: str, home_name: str, away_name: str, stan
         season_half=float(season_half)
     )
 
-def parse_past_match(m_info: Dict[str, Any], target_team_name: str, build_id: str) -> Optional[MatchRecord]:
+def parse_past_match(m_info: Dict[str, Any], target_team_name: str) -> Optional[MatchRecord]:
     link = m_info.get('linkToMatch', '')
     mid_match = re.search(r'#(\d+)', link)
     if not mid_match:
@@ -422,7 +423,7 @@ def parse_past_match(m_info: Dict[str, Any], target_team_name: str, build_id: st
         except Exception:
             pass
     if not past_data:
-        u = f"https://www.fotmob.com/_next/data/{build_id}/en/match/{past_mid}.json"
+        u = f"https://www.fotmob.com/api/data/matchDetails?matchId={past_mid}"
         past_data = fetch_json(u)
         if past_data:
             with open(cache_f, 'w', encoding='utf-8') as f:
@@ -430,7 +431,7 @@ def parse_past_match(m_info: Dict[str, Any], target_team_name: str, build_id: st
     if not past_data:
         return None
 
-    content = past_data['pageProps'].get('content', {})
+    content = extract_page_props(past_data).get('content', {})
     is_home = m_info.get('home', {}).get('isOurTeam', False)
     venue = 'H' if is_home else 'A'
     opp_name = m_info.get('away', {}).get('name') if is_home else m_info.get('home', {}).get('name')
@@ -572,9 +573,7 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
     
     current_bankroll = get_current_bankroll()
     print(f"[*] Bankroll Operativo Attivo Rilevato: EUR {current_bankroll:.2f}")
-
-    build_id = get_live_fotmob_build_id()
-    print(f"[*] FotMob Live BuildId Estratto: {build_id}")
+    print("[*] Sorgente FotMob: API Data v2 (/api/data/leagues & /api/data/matchDetails)")
 
     # 1. Scrape live odds from BetExplorer for all 5 leagues
     print("\n[*] Recupero quote live di consenso dai bookmaker (BetExplorer)...")
@@ -590,12 +589,13 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
     standings_cache = {}
 
     for lcode, conf in LEAGUE_CONFIG.items():
-        standings_cache[lcode] = fetch_league_standings(lcode, build_id)
-        u = f"https://www.fotmob.com/_next/data/{build_id}/en/leagues/{conf['fotmob_id']}/matches.json"
+        u = f"https://www.fotmob.com/api/data/leagues?id={conf['fotmob_id']}"
         data = fetch_json(u)
-        if not data or 'pageProps' not in data or 'fixtures' not in data['pageProps']:
+        props = extract_page_props(data)
+        standings_cache[lcode] = fetch_league_standings(lcode, league_data=props)
+        if 'fixtures' not in props:
             continue
-        all_m = data['pageProps']['fixtures'].get('allMatches', [])
+        all_m = props['fixtures'].get('allMatches', [])
         
         # Dynamic lookahead window:
         # Midweek scan (Mon-Wed): evaluate strictly midweek fixtures up to Thursday (delta_days <= 2)
@@ -656,32 +656,34 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
         q1, qx, q2 = odds
         print(f"[{idx:02d}/{len(target_fixtures)}] {lcode} | {title} (Odds: {q1:.2f} - {qx:.2f} - {q2:.2f})")
 
-        # Download match details
+        # Download match details (refresh upcoming cache if older than 6h so teamForm stays fresh)
         cache_f = os.path.join(CACHE_DIR, f"{mid}.json")
         m_data = None
         if os.path.exists(cache_f):
             try:
-                with open(cache_f, 'r', encoding='utf-8') as fp:
-                    m_data = json.load(fp)
+                if (datetime.now().timestamp() - os.path.getmtime(cache_f)) < 21600:
+                    with open(cache_f, 'r', encoding='utf-8') as fp:
+                        m_data = json.load(fp)
             except Exception:
                 pass
         if not m_data:
-            u = f"https://www.fotmob.com/_next/data/{build_id}/en/match/{mid}.json"
+            u = f"https://www.fotmob.com/api/data/matchDetails?matchId={mid}"
             m_data = fetch_json(u)
             if m_data:
                 with open(cache_f, 'w', encoding='utf-8') as fp:
                     json.dump(m_data, fp)
 
-        if not m_data or 'pageProps' not in m_data:
+        props = extract_page_props(m_data)
+        if not props or 'content' not in props:
             continue
 
-        content = m_data['pageProps'].get('content', {})
+        content = props.get('content', {})
         teamForm = content.get('matchFacts', {}).get('teamForm')
         if not teamForm or len(teamForm) < 2:
             continue
 
-        home_matches = [parse_past_match(m, h_name, build_id) for m in teamForm[0]]
-        away_matches = [parse_past_match(m, a_name, build_id) for m in teamForm[1]]
+        home_matches = [parse_past_match(m, h_name) for m in teamForm[0]]
+        away_matches = [parse_past_match(m, a_name) for m in teamForm[1]]
         home_matches = [m for m in home_matches if m is not None]
         away_matches = [m for m in away_matches if m is not None]
 
