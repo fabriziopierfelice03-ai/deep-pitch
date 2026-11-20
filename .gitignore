@@ -9,4 +9,5 @@ matches_enriched_xg_top5_2014_2026.csv
 *.obj
 downloaded_files/
 data/scanner_cache/
+data/tier2_fotmob_stats.jsonl
 scratch/
