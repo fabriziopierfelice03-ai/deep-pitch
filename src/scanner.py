@@ -413,13 +413,16 @@ def parse_past_match(m_info: Dict[str, Any], target_team_name: str) -> Optional[
         return None
     past_mid = mid_match.group(1)
     
-    # Check cache
+    # Check cache (invalidate stale pre-match snapshots lacking post-match Opta stats)
     cache_f = os.path.join(CACHE_DIR, f"{past_mid}.json")
     past_data = None
     if os.path.exists(cache_f):
         try:
             with open(cache_f, 'r', encoding='utf-8') as f:
-                past_data = json.load(f)
+                candidate = json.load(f)
+            c_stats = ((extract_page_props(candidate).get('content', {}).get('stats') or {}).get('Periods') or {}).get('All', {}).get('stats')
+            if c_stats:
+                past_data = candidate
         except Exception:
             pass
     if not past_data:

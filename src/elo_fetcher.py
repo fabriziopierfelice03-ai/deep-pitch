@@ -34,7 +34,7 @@ ALIAS_MAP = {
     "tottenhamhotspur": "tottenham",
     "spurs": "tottenham",
     "newcastleunited": "newcastle",
-    "nottinghamforest": "nottingham",
+    "nottinghamforest": "forest",
     "afcbournemouth": "bournemouth",
     "wolverhampton": "wolves",
     "wolverhamptonwanderers": "wolves",
@@ -48,8 +48,8 @@ ALIAS_MAP = {
     "celtavigo": "celta",
     "celtadevigo": "celta",
     "deportivoalaves": "alaves",
-    "deportivoacoruna": "depacoruna",
-    "deportivolacoruna": "depacoruna",
+    "deportivoacoruna": "depor",
+    "deportivolacoruna": "depor",
     "realsociedad": "sociedad",
     "realbetis": "betis",
     "rayovallecano": "vallecano",
@@ -57,7 +57,7 @@ ALIAS_MAP = {
     "bayernmunich": "bayern",
     "bayerleverkusen": "leverkusen",
     "borussiadortmund": "dortmund",
-    "borussiamonchengladbach": "mgladbach",
+    "borussiamonchengladbach": "gladbach",
     "eintrachtfrankfurt": "frankfurt",
     "scfreiburg": "freiburg",
     "tsghoffenheim": "hoffenheim",
@@ -67,10 +67,10 @@ ALIAS_MAP = {
     "fckoln": "koln",
     "vfbstuttgart": "stuttgart",
     "hamburgersv": "hamburg",
-    "parissaintgermain": "psg",
+    "parissaintgermain": "parissg",
     "asmonaco": "monaco",
     "olympiquemarseille": "marseille",
-    "olympique lyonnais": "lyon",
+    "olympiquelyonnais": "lyon",
 }
 
 def strip_accents(text: str) -> str:
@@ -81,6 +81,13 @@ def clean_key(name: str) -> str:
     clean = re.sub(r'[^a-z0-9]', '', name)
     return ALIAS_MAP.get(clean, clean)
 
+def _decode_json_str(raw: str) -> str:
+    """Decodes JSON unicode escapes (e.g. \\u00e9 -> e) extracted via regex."""
+    try:
+        return json.loads(f'"{raw}"')
+    except Exception:
+        return raw
+
 def is_cache_valid() -> bool:
     if not os.path.exists(CACHE_FILE):
         return False
@@ -90,28 +97,22 @@ def is_cache_valid() -> bool:
 def scrape_live_clubelo() -> Dict[str, float]:
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     ratings = {}
-    
+
+    def store(raw_esc: str, elo_str: str):
+        elo = round(float(elo_str), 2)
+        name = _decode_json_str(raw_esc)
+        ratings[clean_key(name)] = elo
+        ratings[name.lower()] = elo
+
     for l_code, fed_url in LEAGUE_URLS.items():
         url = f"https://clubelo.com/{fed_url}"
         try:
             req = urllib.request.Request(url, headers=headers)
             html = urllib.request.urlopen(req, timeout=10).read().decode('utf-8', errors='ignore')
-            
-            m1 = re.finditer(r'\{[^{}]*"Elo":\s*([0-9\.]+)[^{}]*"Name":\s*"([^"]+)"[^{}]*\}', html)
-            for m in m1:
-                elo = round(float(m.group(1)), 2)
-                raw_name = m.group(2)
-                k = clean_key(raw_name)
-                ratings[k] = elo
-                ratings[raw_name.lower()] = elo
-                
-            m2 = re.finditer(r'\{[^{}]*"Name":\s*"([^"]+)"[^{}]*"Elo":\s*([0-9\.]+)[^{}]*\}', html)
-            for m in m2:
-                raw_name = m.group(1)
-                elo = round(float(m.group(2)), 2)
-                k = clean_key(raw_name)
-                ratings[k] = elo
-                ratings[raw_name.lower()] = elo
+            for m in re.finditer(r'\{[^{}]*"Elo":\s*([0-9\.]+)[^{}]*"Name":\s*"([^"]+)"[^{}]*\}', html):
+                store(m.group(2), m.group(1))
+            for m in re.finditer(r'\{[^{}]*"Name":\s*"([^"]+)"[^{}]*"Elo":\s*([0-9\.]+)[^{}]*\}', html):
+                store(m.group(1), m.group(2))
         except Exception as e:
             print(f"Warning: fallito scraping ClubElo per {fed_url}: {e}")
             
