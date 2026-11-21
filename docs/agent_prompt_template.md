@@ -127,5 +127,5 @@ Once `predict.py` generates calibrated probabilities via Bayesian Shrinkage, sel
 2. **Odds Filtering Range:**
    $$1.60 < \text{Odds}_{\text{Bookmaker}} < 3.10$$
 3. **Position Sizing (Quarter Kelly Criterion):**
-   $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.015\right)$$
-   * Individual stake is capped at **1.5%** of current bankroll.
+   $$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.030\right)$$
+   * Individual stake is capped at **3.0%** of current bankroll.

@@ -16,7 +16,7 @@ Data Ingestion & Integrity:
 - Finished H2H history
 - Live official ClubElo rating ingestion (ClubElo.com)
 - Shin (1993) De-Vigging + Bayesian Shrinkage Layer (55.1% Model, 44.9% Market)
-- Money Management: Quarter-Kelly Criterion (cap 1.5%) on active bankroll
+- Money Management: Quarter-Kelly Criterion (cap 3.0%) on active bankroll
 
 STRICT ANTI-HALLUCINATION GUARD:
 Any fixture without authentic market odds is marked as SKIPPED (ODDS_UNAVAILABLE).
@@ -738,7 +738,7 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
                 min_ev=0.050,
                 min_odds=1.60,
                 max_odds=3.10,
-                max_cap=0.015
+                max_cap=0.030
             )
             if dec["actionable"]:
                 qualified_1x2_bets.append({
@@ -767,7 +767,7 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
                 b = odd_dnb - 1.0
                 k_star = ev_dnb / b if b > 0 else 0.0
                 q_k = k_star * 0.25
-                c_frac = max(0.0, min(q_k, 0.015))
+                c_frac = max(0.0, min(q_k, 0.030))
                 # Shadow bankroll roughly tracking
                 stake_d = round(current_bankroll * c_frac, 2)
                 qualified_dnb_bets.append({

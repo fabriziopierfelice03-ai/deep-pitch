@@ -36,22 +36,22 @@ To rigorously stress-test strategy viability without lookahead bias or data cont
                ┌─────────────┴─────────────┐
                ▼                           ▼
      [ Quarter-Kelly Staking ]    [ 10,000 Monte Carlo Runs ]
-     (1.5% Bankroll Hard Cap)     (Bootstrap & Permutation)
+     (3.0% Bankroll Hard Cap)     (Bootstrap & Permutation)
                │                           │
                ▼                           ▼
-        +15.31% Net ROI             0.00% Risk of Ruin
-        +9.92 Flat PnL Units       26.25% Median Drawdown
-        22.81% Max Drawdown         €1,155 Median Bankroll
+        +56.88% Net ROI             0.00% Risk of Ruin
+        +9.92 Flat PnL Units       34.83% Median Drawdown
+        30.43% Max Drawdown         €1,569 Median Bankroll
 ```
 
 ### 1. Capital Allocation & Risk Management
 The backtester applies a fractional **Quarter-Kelly Criterion** with a hard risk ceiling to eliminate gambler's ruin while maximizing geometric bankroll growth:
 
-$$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.015\right)$$
+$$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.030\right)$$
 
 * $p$: Model probability calibrated via Bayesian Shrinkage.
 * $q$: Decimal odds offered by the market.
-* **Hard Capital Cap:** Individual position sizes never exceed **1.5%** of current bankroll under any circumstance.
+* **Hard Capital Cap:** Individual position sizes never exceed **3.0%** of current bankroll under any circumstance.
 * **Selection Filters:** Matches are only executed if $1.60 < \text{Odds} < 3.10$ and Expected Value $\text{EV} = (p \cdot q) - 1 > +5.0\%$.
 
 ### 2. Out-of-Sample Sensitivity Analysis (1,627 Test Matches)
@@ -59,14 +59,14 @@ The table below illustrates the strategy's sensitivity across various EV thresho
 
 | EV Threshold | Bets | Won | Win Rate | Avg Odds | Final Bankroll | ROI (%) | Max Drawdown | Flat PnL |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **2.0%** | 584 | 276 | 47.26% | 2.22 | €1,067.73 | +6.77% | 26.02% | +6.50u |
-| **3.0%** | 519 | 244 | 47.01% | 2.23 | €1,082.45 | +8.24% | 25.49% | +5.28u |
-| **4.0%** | 467 | 221 | 47.32% | 2.23 | €1,119.56 | +11.96% | 26.70% | +5.86u |
-| **5.0% (Target)** | **421** | **201** | **47.74%** | **2.23** | **€1,153.11** | **+15.31%** | **22.81%** | **+9.92u** |
-| **5.5%** | 405 | 192 | 47.41% | 2.23 | €1,117.55 | +11.76% | 22.82% | +8.72u |
-| **6.0%** | 381 | 183 | 48.03% | 2.24 | €1,193.86 | +19.39% | 23.33% | +13.68u |
-| **7.0%** | 347 | 164 | 47.26% | 2.24 | €1,085.29 | +8.53% | 24.97% | +7.09u |
-| **8.0%** | 316 | 146 | 46.20% | 2.25 | €989.42 | -1.06% | 25.00% | -0.00u |
+| **2.0%** | 584 | 276 | 47.26% | 2.22 | €1,462.29 | +46.23% | 33.73% | +6.50u |
+| **3.0%** | 519 | 244 | 47.01% | 2.23 | €1,482.45 | +48.24% | 32.02% | +5.28u |
+| **4.0%** | 467 | 221 | 47.32% | 2.23 | €1,534.87 | +53.49% | 30.78% | +5.86u |
+| **5.0% (Target)** | **421** | **201** | **47.74%** | **2.23** | **€1,568.83** | **+56.88%** | **30.43%** | **+9.92u** |
+| **5.5%** | 405 | 192 | 47.41% | 2.23 | €1,507.25 | +50.72% | 30.43% | +8.72u |
+| **6.0%** | 381 | 183 | 48.03% | 2.24 | €1,604.84 | +60.48% | 30.32% | +13.68u |
+| **7.0%** | 347 | 164 | 47.26% | 2.24 | €1,488.91 | +48.89% | 33.08% | +7.09u |
+| **8.0%** | 316 | 146 | 46.20% | 2.25 | €1,372.53 | +37.25% | 32.92% | -0.00u |
 
 ### 3. Dual-Module Monte Carlo Stress Testing (10,000 Runs)
 
@@ -78,22 +78,22 @@ Simulates 10,000 alternative seasons by sampling 421 bets with replacement from 
 | Metric | Simulated Value | Risk Interpretation |
 | :--- | :---: | :--- |
 | **Probability of Ruin ($< €200$)** | **0.00%** | Zero runs breached the 80% loss barrier |
-| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€682.44** | Unfavorable variance regime over a full season |
-| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,154.87** | Central expectation aligns closely with realized +15.31% return |
-| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€1,982.92** | High-water mark under positive variance |
-| **Median Maximum Drawdown** | **26.84%** | Expected drawdown depth across simulated paths |
-| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **45.45%** | Drawdown boundary in adverse volatility regimes |
-| **Worst-Case Absolute Drawdown** | **70.32%** | Theoretical tail scenario across 4,210,000 total simulated wagers |
+| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€675.66** | Unfavorable variance regime over a full season |
+| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,569.36** | Central expectation aligns closely with realized +56.88% return |
+| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€3,658.17** | High-water mark under positive variance |
+| **Median Maximum Drawdown** | **34.83%** | Expected drawdown depth across simulated paths |
+| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **56.58%** | Drawdown boundary in adverse volatility regimes |
+| **Worst-Case Absolute Drawdown** | **81.82%** | Theoretical tail scenario across 4,210,000 total simulated wagers |
 
 #### Module B: Trade-Order Permutation (Reshuffling without Replacement)
 Quantifies sequence risk and losing-streak clustering by randomly shuffling the chronological order of the 421 observed historical bets:
 
 | Permutation Metric | Value | Risk Interpretation |
 | :--- | :---: | :--- |
-| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **18.00%** | Favorable dispersion of wins and losses |
-| **Median Drawdown ($50^{\text{th}}$ percentile)** | **25.57%** | Standard sequence-dependent drawdown |
-| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **36.85%** | Clustered adverse variance |
-| **Worst-Case Permutation Drawdown** | **51.51%** | Maximum clustering of losing bets in 10,000 random sequences |
+| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **24.52%** | Favorable dispersion of wins and losses |
+| **Median Drawdown ($50^{\text{th}}$ percentile)** | **34.13%** | Standard sequence-dependent drawdown |
+| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **48.03%** | Clustered adverse variance |
+| **Worst-Case Permutation Drawdown** | **65.93%** | Maximum clustering of losing bets in 10,000 random sequences |
 
 ### 4. Compiling and Running the C++ Engine
 

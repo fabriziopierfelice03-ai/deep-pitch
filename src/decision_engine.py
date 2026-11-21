@@ -14,7 +14,7 @@ def calculate_quarter_kelly(
     min_ev: float = 0.050,
     min_odds: float = 1.60,
     max_odds: float = 3.10,
-    max_cap: float = 0.015,
+    max_cap: float = 0.030,
 ) -> Dict[str, Any]:
     """
     Calcola l'Expected Value e il dimensionamento dello stake con Quarter-Kelly.
@@ -26,7 +26,7 @@ def calculate_quarter_kelly(
     - min_ev: soglia minima di valore atteso (default 5.0% = 0.050)
     - min_odds: quota minima ammissibile (default 1.60)
     - max_odds: quota massima ammissibile (default 3.10)
-    - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 1.5% = 0.015)
+    - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 3.0% = 0.030)
     """
     if bookmaker_odds <= 1.0 or prob <= 0.0 or prob > 1.0:
         return {
@@ -64,7 +64,7 @@ def calculate_quarter_kelly(
     # Quarter-Kelly: riduce drasticamente il drawdown e la varianza
     quarter_kelly = kelly_star * 0.25
 
-    # Hard Cap di portafoglio: max 1.5% del bankroll per singola posizione
+    # Hard Cap di portafoglio: max 3.0% del bankroll per singola posizione
     capped_fraction = max(0.0, min(quarter_kelly, max_cap))
     stake_eur = round(bankroll * capped_fraction, 2)
 
@@ -88,7 +88,7 @@ def calculate_half_kelly(
     bookmaker_odds: float,
     bankroll: float = 1000.0,
     min_ev: float = 0.050,
-    max_cap: float = 0.015,
+    max_cap: float = 0.030,
 ) -> Dict[str, Any]:
     """Alias di retrocompatibilità che invoca calculate_quarter_kelly."""
     return calculate_quarter_kelly(
@@ -107,7 +107,7 @@ def scan_match_markets(
     min_ev: float = 0.050,
     min_odds: float = 1.60,
     max_odds: float = 3.10,
-    max_cap: float = 0.015,
+    max_cap: float = 0.030,
 ) -> List[Dict[str, Any]]:
     """
     Confronta le probabilità calcolate da predict.py con le quote di mercato fornite.
@@ -162,7 +162,7 @@ if __name__ == "__main__":
     print(f"Probabilita Modello:    {res['prob_perc']}% (Fair: {res['fair_odds']})")
     print(f"Quota Bookmaker:        {res['bookmaker_odds']}")
     print(f"Expected Value (EV):    +{res['ev_perc']}%")
-    print(f"Frazione Quarter-Kelly: {res['applied_fraction_perc']}% (Cap max: 1.5%)")
+    print(f"Frazione Quarter-Kelly: {res['applied_fraction_perc']}% (Cap max: 3.0%)")
     print(f"Stake Calcolato:        €{res['stake_eur']}")
     print(f"Giocabile:              {res['actionable']}")
     print("=" * 65)

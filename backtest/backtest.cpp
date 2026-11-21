@@ -11,7 +11,7 @@
 
 /**
  * Quarter-Kelly Staking with Portfolio Hard Cap
- * Stake = bankroll * min(0.25 * (EV / (Odds - 1)), 0.015)
+ * Stake = bankroll * min(0.25 * (EV / (Odds - 1)), 0.030)
  */
 double quarter_kelly(double bankroll, double p, double q) {
     double b = q - 1.0;
@@ -20,7 +20,7 @@ double quarter_kelly(double bankroll, double p, double q) {
     if (ev <= 0.0) return 0.0;
     double f_star = ev / b;
     double f_quarter = f_star * 0.25;
-    double fraction = std::min(f_quarter, 0.015); // Max 1.5% bankroll cap
+    double fraction = std::min(f_quarter, 0.030); // Max 3.0% bankroll cap
 
     return bankroll * fraction;
 }
@@ -240,7 +240,7 @@ int main() {
 
     // 1. Sensitivity Analysis Grid
     std::cout << "-------------------------------------------------------------------------\n";
-    std::cout << " EV Threshold Sensitivity Analysis (Test Set, Quarter-Kelly Cap 1.5%):\n";
+    std::cout << " EV Threshold Sensitivity Analysis (Test Set, Quarter-Kelly Cap 3.0%):\n";
     std::cout << "-------------------------------------------------------------------------\n";
     std::cout << "  EV Thresh | Bets | Won | Win Rate | Avg Odd | Final Bank | ROI (%) | Max DD  | Flat PnL\n";
     std::cout << "-------------------------------------------------------------------------\n";
@@ -266,7 +266,7 @@ int main() {
     auto target_res = run_strategy(test_matches, TARGET_EV, &playable_bets);
 
     std::cout << "=========================================================================\n";
-    std::cout << "  TARGET STRATEGY BENCHMARK: EV > 5.0% (1.60 < Odds < 3.10, Max Cap 1.5%)\n";
+    std::cout << "  TARGET STRATEGY BENCHMARK: EV > 5.0% (1.60 < Odds < 3.10, Max Cap 3.0%)\n";
     std::cout << "=========================================================================\n";
     std::cout << "  ? Initial Capital:        EUR 1,000.00\n";
     std::cout << "  ? Total Bets Qualified:   " << target_res.total_bets << " (out of " << test_matches.size() << " test matches)\n";
