@@ -10,6 +10,9 @@ Leghe incluse (tutte con Opta xG completo dal 2021/22 al 2026/27):
 - P1: Liga Portugal (id=61)
 - D2: German 2. Bundesliga (id=146)
 - B1: Belgian Pro League (id=40)
+- NO1: Norwegian Eliteserien (id=59)
+- SE1: Swedish Allsvenskan (id=67)
+- DK1: Danish Superliga (id=46)
 """
 
 import os
@@ -29,14 +32,18 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 STATS_JSONL = os.path.join(DATA_DIR, "tier2_fotmob_stats.jsonl")
 OUT_CSV = os.path.join(DATA_DIR, "matches_enriched_xg_tier2_2021_2026.csv")
 
-SEASONS = ["2021/2022", "2022/2023", "2023/2024", "2024/2025", "2025/2026", "2026/2027"]
+WINTER_SEASONS = ["2021/2022", "2022/2023", "2023/2024", "2024/2025", "2025/2026", "2026/2027"]
+CALENDAR_SEASONS = ["2021", "2022", "2023", "2024", "2025", "2026"]
 
 TIER2_CONFIG = {
-    "E1": {"name": "Championship", "fotmob_id": 48, "init_elo": 1560.0, "ucl": 2, "uel": 6, "rel": 22},
-    "N1": {"name": "Eredivisie", "fotmob_id": 57, "init_elo": 1545.0, "ucl": 2, "uel": 4, "rel": 16},
-    "P1": {"name": "Liga Portugal", "fotmob_id": 61, "init_elo": 1550.0, "ucl": 2, "uel": 4, "rel": 16},
-    "D2": {"name": "2. Bundesliga", "fotmob_id": 146, "init_elo": 1540.0, "ucl": 2, "uel": 3, "rel": 16},
-    "B1": {"name": "Belgian Pro League", "fotmob_id": 40, "init_elo": 1540.0, "ucl": 2, "uel": 6, "rel": 15},
+    "E1":  {"name": "Championship",       "fotmob_id": 48,  "init_elo": 1560.0, "ucl": 2, "uel": 6, "rel": 22, "seasons": WINTER_SEASONS},
+    "N1":  {"name": "Eredivisie",         "fotmob_id": 57,  "init_elo": 1545.0, "ucl": 2, "uel": 4, "rel": 16, "seasons": WINTER_SEASONS},
+    "P1":  {"name": "Liga Portugal",      "fotmob_id": 61,  "init_elo": 1550.0, "ucl": 2, "uel": 4, "rel": 16, "seasons": WINTER_SEASONS},
+    "D2":  {"name": "2. Bundesliga",      "fotmob_id": 146, "init_elo": 1540.0, "ucl": 2, "uel": 3, "rel": 16, "seasons": WINTER_SEASONS},
+    "B1":  {"name": "Belgian Pro League", "fotmob_id": 40,  "init_elo": 1540.0, "ucl": 2, "uel": 6, "rel": 15, "seasons": WINTER_SEASONS},
+    "NO1": {"name": "Eliteserien",        "fotmob_id": 59,  "init_elo": 1490.0, "ucl": 1, "uel": 4, "rel": 14, "seasons": CALENDAR_SEASONS},
+    "SE1": {"name": "Allsvenskan",        "fotmob_id": 67,  "init_elo": 1480.0, "ucl": 1, "uel": 3, "rel": 14, "seasons": CALENDAR_SEASONS},
+    "DK1": {"name": "Superligaen",        "fotmob_id": 46,  "init_elo": 1525.0, "ucl": 2, "uel": 6, "rel": 11, "seasons": WINTER_SEASONS},
 }
 
 CSV_HEADER = [
@@ -87,7 +94,7 @@ def discover_regular_fixtures() -> List[Dict[str, Any]]:
 
     for lcode, conf in TIER2_CONFIG.items():
         lid = conf["fotmob_id"]
-        for season in SEASONS:
+        for season in conf["seasons"]:
             u = f"https://www.fotmob.com/api/data/leagues?id={lid}&season={urllib.parse.quote(season)}"
             data = fetch_json_retry(u)
             if not data or "fixtures" not in data:
