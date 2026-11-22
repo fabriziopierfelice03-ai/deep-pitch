@@ -5,6 +5,7 @@ venv/
 env/
 matches_enriched_xg_top5_2014_2026.csv
 data/matches_enriched_xg_*.csv
+models/*_weights.*
 *.exe
 *.o
 *.obj
