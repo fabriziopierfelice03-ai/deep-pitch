@@ -11,5 +11,6 @@ models/*_weights.*
 *.obj
 downloaded_files/
 data/scanner_cache/
+data/fd_cache/
 data/tier2_fotmob_stats.jsonl
 scratch/

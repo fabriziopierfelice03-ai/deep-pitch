@@ -45,12 +45,16 @@ from src.feature_builder import (
     validate_feature_scaling
 )
 from src.predict import predici_partita
+from src.predict_v2 import predici_partita_v2
+from src.v2_state_engine import LiveV2StateEngine
+from src.injury_lineup import build_match_injury_report, check_injury_trap_guard
 from src.decision_engine import calculate_quarter_kelly
 
 CACHE_DIR = os.path.join(BASE_DIR, "data", "scanner_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 TRACKING_CSV = os.path.join(BASE_DIR, "tracking_2026_2027.csv")
+AUDIT_V2_CSV = os.path.join(BASE_DIR, "data", "v2_scan_audit.csv")
 
 from src.elo_fetcher import get_live_elo
 
@@ -223,34 +227,39 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
     
+    eng_tag = str(scan_summary.get('engine', 'v2')).upper()
+    ev_rule = "EV ∈ [1.0%, 8.0%)" if eng_tag == "V2" else "EV ≥ +5.0%"
     if not new_bets:
         msg = (
-            f"🎯 *DEEP PITCH | SCANSIONE PRE-MATCH COMPLETATA*\n"
+            f"🎯 *DEEP PITCH {eng_tag} | SCANSIONE PRE-MATCH COMPLETATA*\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📅 Scansione: *{now_str}*\n"
             f"💰 Bankroll Attivo: *€{bankroll:.2f}*\n"
             f"🔍 Match analizzati: *{scan_summary.get('evaluated_fixtures', 0)}* (Top 5 Leghe)\n"
-            f"ℹ️ *Nessuna nuova value bet identificata con EV ≥ +5.0%* per questo turno.\n"
+            f"🛡️ Trappole infortuni bloccate: *{scan_summary.get('traps_blocked', 0)}*\n"
+            f"ℹ️ *Nessuna nuova value bet identificata con {ev_rule}* per questo turno.\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🛡️ _Nessun rischio assunto. Capitale preservato al 100%._"
         )
     else:
         msg_lines = [
-            f"🎯 *DEEP PITCH | NUOVE VALUE BET IDENTIFICATE*",
+            f"🎯 *DEEP PITCH {eng_tag} | NUOVE VALUE BET IDENTIFICATE*",
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             f"📅 Scansione: *{now_str}*",
             f"💰 Bankroll Attivo: *€{bankroll:.2f}*",
             f"🔍 Match analizzati: *{scan_summary.get('evaluated_fixtures', 0)}* (Top 5 Leghe)",
-            f"✨ Nuove selezioni qualificate: *{len(new_bets)}*\n"
+            f"🛡️ Trappole infortuni bloccate: *{scan_summary.get('traps_blocked', 0)}*",
+            f"✨ Nuove selezioni qualificate ({ev_rule}): *{len(new_bets)}*\n"
         ]
         
         for b in new_bets:
             book_tag = f" [{b['best_bookmakers']}]" if b.get('best_bookmakers') else ""
+            inj_tag = f" | ⚠️ {b['injury_note']}" if b.get('injury_note') else ""
             msg_lines.extend([
                 f"⚽ *{b['match_clean']}*",
                 f"• Lega: *{b['league']}* | Data: *{b['date_csv']}*",
                 f"• Segno: *{b['selection']}* @ *{b['bookmaker_odds']:.2f}*{book_tag} (Fair: {b['fair_odds']:.2f})",
-                f"• Prob. Modello: *{b['model_prob']:.1f}%* | EV: *+{b['ev_perc']:.2f}%*",
+                f"• Prob. Modello: *{b['model_prob']:.1f}%* | EV: *+{b['ev_perc']:.2f}%*{inj_tag}",
                 f"• Stake Quarter-Kelly: *€{b['stake_eur']:.2f}* ({b['applied_fraction']:.2f}%)\n"
             ])
             
@@ -641,18 +650,77 @@ def compute_rest_and_fatigue(fixture_time_str: str, match_records: List[MatchRec
     matches_14d = float(sum(1 for d in dates if 0 < (fix_dt.date() - d.date()).days <= 14))
     return rest_days, matches_14d
 
-def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, Any]:
+def extract_raw_standings_rows(league_data: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    props = extract_page_props(league_data)
+    if 'table' in props and props['table']:
+        try:
+            return props['table'][0].get('data', {}).get('table', {}).get('all', []) or []
+        except Exception:
+            pass
+    return []
+
+
+def load_cached_past_match_jsons(team_form_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Loads up to 5 already-cached completed FotMob match JSONs for a team's recent form."""
+    out = []
+    for m_info in team_form_list[:5]:
+        link = m_info.get('linkToMatch', '')
+        mid_match = re.search(r'#(\d+)', link)
+        if not mid_match:
+            continue
+        cache_f = os.path.join(CACHE_DIR, f"{mid_match.group(1)}.json")
+        if os.path.exists(cache_f):
+            try:
+                with open(cache_f, 'r', encoding='utf-8') as fp:
+                    out.append(json.load(fp))
+            except Exception:
+                pass
+    return out
+
+
+def append_v2_audit_rows(audit_rows: List[Dict[str, Any]], csv_path: str = AUDIT_V2_CSV) -> None:
+    """Appends per-fixture Deep-Pitch v2 audit + CLV baseline + injury snapshot to data/v2_scan_audit.csv."""
+    if not audit_rows:
+        return
+    import csv
+    fieldnames = [
+        "timestamp", "date", "league", "match", "engine",
+        "avg_q1", "avg_qx", "avg_q2", "best_q1", "best_qx", "best_q2",
+        "p_v2_1", "p_v2_x", "p_v2_2", "p_adj_1", "p_adj_x", "p_adj_2",
+        "p_shin_1", "p_shin_x", "p_shin_2",
+        "lineup_type", "home_fresh_out", "away_fresh_out", "injury_logit_shift",
+        "qualified_sel", "qualified_odd", "qualified_book", "qualified_ev", "trap_blocked_reason",
+    ]
+    write_header = (not os.path.exists(csv_path)) or (os.path.getsize(csv_path) == 0)
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    with open(csv_path, "a", encoding="utf-8", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        for r in audit_rows:
+            writer.writerow(r)
+
+
+def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "v2") -> Dict[str, Any]:
     """
     Main scanner execution routine.
-    - mode='auto': Automatically detects matches in the upcoming 4-day window.
+    - mode='auto': Automatically detects matches in the upcoming window.
+    - engine='v2' (default): Deep-Pitch v2 Residual-Offset 5-Head Ensemble + FotMob Fresh-Injury/Lineup Guard.
+    - engine='v1': Legacy BettingNet v1 + Bayesian Shrinkage.
     """
     print("==========================================================================")
-    print("      DEEP-PITCH: OFFICIAL CERTIFIED PRE-MATCH SCANNER")
+    print(f"      DEEP-PITCH ({engine.upper()}): OFFICIAL CERTIFIED PRE-MATCH SCANNER")
     print("==========================================================================")
     
     current_bankroll = get_current_bankroll()
     print(f"[*] Bankroll Operativo Attivo Rilevato: EUR {current_bankroll:.2f}")
     print("[*] Sorgente FotMob: API Data v2 (/api/data/leagues & /api/data/matchDetails)")
+
+    v2_state_engine = None
+    if engine == "v2":
+        print("[*] Inizializzazione Deep-Pitch v2 Live State Engine (Past-Market + Exact DC npxG + EWMA)...")
+        v2_state_engine = LiveV2StateEngine()
+        print(f"    - Squadre indicizzate live: {len(v2_state_engine.team_state)} | Solver esatti attivi: {len(v2_state_engine.league_solvers)}/5 leghe")
 
     # 1. Scrape live odds from BetExplorer for all 5 leagues
     print("\n[*] Recupero quote live di consenso dai bookmaker (BetExplorer)...")
@@ -666,12 +734,14 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
     print("\n[*] Recupero calendario ufficiale e selezione incontri in arrivo...")
     target_fixtures = []
     standings_cache = {}
+    raw_standings_cache = {}
 
     for lcode, conf in LEAGUE_CONFIG.items():
         u = f"https://www.fotmob.com/api/data/leagues?id={conf['fotmob_id']}"
         data = fetch_json(u)
         props = extract_page_props(data)
         standings_cache[lcode] = fetch_league_standings(lcode, league_data=props)
+        raw_standings_cache[lcode] = extract_raw_standings_rows(props)
         if 'fixtures' not in props:
             continue
         all_m = props['fixtures'].get('allMatches', [])
@@ -716,7 +786,9 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
     evaluated_results = []
     qualified_1x2_bets = []
     qualified_dnb_bets = []
+    audit_rows = []
     skipped_no_odds = 0
+    traps_blocked = 0
 
     for idx, f in enumerate(target_fixtures, 1):
         lcode = f['league']
@@ -755,7 +827,7 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
             best_books = {"1": ["Media"], "X": ["Media"], "2": ["Media"]}
             print(f"[{idx:02d}/{len(target_fixtures)}] {lcode} | {title} (Odds Avg fallback: {q1:.2f} - {qx:.2f} - {q2:.2f})")
 
-        # Download match details (refresh upcoming cache if older than 6h so teamForm stays fresh)
+        # Download match details (refresh upcoming cache if older than 6h so teamForm & injuries stay fresh)
         cache_f = os.path.join(CACHE_DIR, f"{mid}.json")
         m_data = None
         if os.path.exists(cache_f):
@@ -795,36 +867,91 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
         h_rest, h_m14 = compute_rest_and_fatigue(t_str, home_matches)
         a_rest, a_m14 = compute_rest_and_fatigue(t_str, away_matches)
 
-        features = build_56_features(
-            home_elo=h_elo,
-            away_elo=a_elo,
-            home_matches=home_matches,
-            away_matches=away_matches,
-            h2h=h2h_rec,
-            standings=standings,
-            home_rest_days=h_rest,
-            away_rest_days=a_rest,
-            home_matches_14d=h_m14,
-            away_matches_14d=a_m14,
-            is_derby=0.0
-        )
+        # Build Live FotMob Pre-Match Fresh-Injury & Lineup Report
+        h_recent_jsons = load_cached_past_match_jsons(teamForm[0])
+        a_recent_jsons = load_cached_past_match_jsons(teamForm[1])
+        injury_report = build_match_injury_report(m_data, h_name, a_name, h_recent_jsons, a_recent_jsons)
+        h_inj = injury_report["home"]
+        a_inj = injury_report["away"]
+        if h_inj["fresh_missing_count"] > 0 or a_inj["fresh_missing_count"] > 0:
+            print(
+                f"  [INJURY/XI ({injury_report['lineup_type']})] "
+                f"Home fresh out: {h_inj['fresh_missing_count']:.1f} ({h_inj['fresh_missing_value_ratio']*100:.1f}% XI) | "
+                f"Away fresh out: {a_inj['fresh_missing_count']:.1f} ({a_inj['fresh_missing_value_ratio']*100:.1f}% XI) | "
+                f"Logit shift: {injury_report['net_logit_shift_home']:+.3f}"
+            )
 
-        scaling = validate_feature_scaling(features)
-        if not scaling["is_sane"]:
-            print(f"  [SCALING WARNING] {title}: min={scaling['min_scaled']:.2f}, max={scaling['max_scaled']:.2f}")
-
-        # Run Prediction with Shin Bayesian Shrinkage anchored to consensus average odds
-        pred = predici_partita(features, market_odds=[avg_q1, avg_qx, avg_q2], devig_method="shin")
-        calib_probs = pred["Bayesian_Shrinkage_1X2"]["Probabilita_%"]
-        p1 = calib_probs["1"] / 100.0
-        px = calib_probs["X"] / 100.0
-        p2 = calib_probs["2"] / 100.0
-        shin_z = pred["Bayesian_Shrinkage_1X2"].get("Shin_Z", 0.0)
+        if engine == "v2" and v2_state_engine is not None:
+            lconf = LEAGUE_CONFIG[lcode]
+            total_games = 34 if lconf["teams"] <= 18 else 38
+            v2_payload = v2_state_engine.build_match_payload(
+                div=lcode,
+                home_team=h_name,
+                away_team=a_name,
+                home_elo=h_elo,
+                away_elo=a_elo,
+                rest_days_h=h_rest,
+                rest_days_a=a_rest,
+                matches_14d_h=h_m14,
+                matches_14d_a=a_m14,
+                home_pts=standings.home_points,
+                away_pts=standings.away_points,
+                matchday=standings.matchday,
+                standings_rows=raw_standings_cache.get(lcode, []),
+                total_games=total_games,
+                rel_pos_1idx=lconf["rel"],
+            )
+            pred_v2 = predici_partita_v2(
+                v2_payload,
+                market_odds=[avg_q1, avg_qx, avg_q2],
+                injury_report=injury_report,
+                devig_method="shin",
+            )
+            p1, px, p2 = pred_v2["Final_1X2"]["Probs_Float"]
+            raw_v2_p = pred_v2["V2_Raw_1X2"]["Probabilita_%"]
+            shin_mkt_p = pred_v2.get("Market_Reference", {}).get("De_Vigged_Market_%", {"1": 0, "X": 0, "2": 0})
+            min_ev_thr = 0.010
+            max_ev_thr = 0.080
+            min_odds_thr = 1.35
+            max_odds_thr = 6.00
+        else:
+            features = build_56_features(
+                home_elo=h_elo,
+                away_elo=a_elo,
+                home_matches=home_matches,
+                away_matches=away_matches,
+                h2h=h2h_rec,
+                standings=standings,
+                home_rest_days=h_rest,
+                away_rest_days=a_rest,
+                home_matches_14d=h_m14,
+                away_matches_14d=a_m14,
+                is_derby=0.0
+            )
+            scaling = validate_feature_scaling(features)
+            if not scaling["is_sane"]:
+                print(f"  [SCALING WARNING] {title}: min={scaling['min_scaled']:.2f}, max={scaling['max_scaled']:.2f}")
+            pred = predici_partita(features, market_odds=[avg_q1, avg_qx, avg_q2], devig_method="shin")
+            calib_probs = pred["Bayesian_Shrinkage_1X2"]["Probabilita_%"]
+            p1 = calib_probs["1"] / 100.0
+            px = calib_probs["X"] / 100.0
+            p2 = calib_probs["2"] / 100.0
+            raw_v2_p = {"1": round(p1 * 100, 2), "X": round(px * 100, 2), "2": round(p2 * 100, 2)}
+            shin_mkt_p = pred["Bayesian_Shrinkage_1X2"].get("De_Vigged_Market_%", {"1": 0, "X": 0, "2": 0})
+            min_ev_thr = 0.050
+            max_ev_thr = 1.000
+            min_odds_thr = 1.60
+            max_odds_thr = 3.10
 
         # Track 1: 1X2 Screening using BEST available ADM bookmaker odds (line-shopping)
         odds_map = {"1": q1, "X": qx, "2": q2}
         avg_odds_map = {"1": avg_q1, "X": avg_qx, "2": avg_q2}
         probs_map = {"1": p1, "X": px, "2": p2}
+
+        # Pick at most the highest-EV actionable selection per match
+        best_match_sel = None
+        best_match_dec = None
+        match_trap_reason = ""
         for sel in ["1", "X", "2"]:
             odd = odds_map[sel]
             prob = probs_map[sel]
@@ -832,31 +959,72 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
                 prob=prob,
                 bookmaker_odds=odd,
                 bankroll=current_bankroll,
-                min_ev=0.050,
-                min_odds=1.60,
-                max_odds=3.10,
-                max_cap=0.030
+                min_ev=min_ev_thr,
+                min_odds=min_odds_thr,
+                max_odds=max_odds_thr,
+                max_cap=0.030,
+                max_ev=max_ev_thr,
             )
             if dec["actionable"]:
-                books_str = ", ".join(best_books.get(sel, []))
-                qualified_1x2_bets.append({
-                    "date": t_str[:10],
-                    "league": lcode,
-                    "match": title,
-                    "selection": sel,
-                    "bookmaker_odds": odd,
-                    "avg_odds": avg_odds_map[sel],
-                    "best_bookmakers": books_str,
-                    "fair_odds": dec["fair_odds"],
-                    "model_prob": dec["prob_perc"],
-                    "ev_perc": dec["ev_perc"],
-                    "stake_eur": dec["stake_eur"],
-                    "applied_fraction": dec["applied_fraction_perc"]
-                })
-                print(
-                    f"  >>> [VALUE 1X2] {sel} @ {odd:.2f} [{books_str}] (Media: {avg_odds_map[sel]:.2f}) "
-                    f"| EV: +{dec['ev_perc']:.2f}% | Stake: EUR {dec['stake_eur']:.2f}"
-                )
+                if engine == "v2":
+                    blocked, trap_msg = check_injury_trap_guard(sel, injury_report)
+                    if blocked:
+                        traps_blocked += 1
+                        match_trap_reason = trap_msg
+                        print(f"  [INJURY TRAP BLOCKED] {sel} @ {odd:.2f} (EV +{dec['ev_perc']:.2f}%) -> {trap_msg}")
+                        continue
+                if best_match_dec is None or dec["ev_perc"] > best_match_dec["ev_perc"]:
+                    best_match_sel = sel
+                    best_match_dec = dec
+
+        if best_match_sel is not None and best_match_dec is not None:
+            sel = best_match_sel
+            odd = odds_map[sel]
+            books_str = ", ".join(best_books.get(sel, []))
+            qualified_1x2_bets.append({
+                "date": t_str[:10],
+                "league": lcode,
+                "match": title,
+                "selection": sel,
+                "bookmaker_odds": odd,
+                "avg_odds": avg_odds_map[sel],
+                "best_bookmakers": books_str,
+                "fair_odds": best_match_dec["fair_odds"],
+                "model_prob": best_match_dec["prob_perc"],
+                "ev_perc": best_match_dec["ev_perc"],
+                "stake_eur": best_match_dec["stake_eur"],
+                "applied_fraction": best_match_dec["applied_fraction_perc"],
+                "injury_note": (
+                    f"H_out={h_inj['fresh_missing_count']:.1f}, A_out={a_inj['fresh_missing_count']:.1f}"
+                    if (h_inj["fresh_missing_count"] > 0 or a_inj["fresh_missing_count"] > 0) else ""
+                ),
+            })
+            print(
+                f"  >>> [VALUE 1X2 {engine.upper()}] {sel} @ {odd:.2f} [{books_str}] (Media: {avg_odds_map[sel]:.2f}) "
+                f"| P={best_match_dec['prob_perc']:.1f}% | EV: +{best_match_dec['ev_perc']:.2f}% | Stake: EUR {best_match_dec['stake_eur']:.2f}"
+            )
+
+        audit_rows.append({
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "date": t_str[:10],
+            "league": lcode,
+            "match": title,
+            "engine": engine,
+            "avg_q1": avg_q1, "avg_qx": avg_qx, "avg_q2": avg_q2,
+            "best_q1": q1, "best_qx": qx, "best_q2": q2,
+            "p_v2_1": raw_v2_p["1"], "p_v2_x": raw_v2_p["X"], "p_v2_2": raw_v2_p["2"],
+            "p_adj_1": round(p1 * 100.0, 2), "p_adj_x": round(px * 100.0, 2), "p_adj_2": round(p2 * 100.0, 2),
+            "p_shin_1": shin_mkt_p["1"], "p_shin_x": shin_mkt_p["X"], "p_shin_2": shin_mkt_p["2"],
+            "lineup_type": injury_report["lineup_type"],
+            "home_fresh_out": h_inj["fresh_missing_count"],
+            "away_fresh_out": a_inj["fresh_missing_count"],
+            "injury_logit_shift": injury_report["net_logit_shift_home"],
+            "qualified_sel": best_match_sel or "",
+            "qualified_odd": odds_map[best_match_sel] if best_match_sel else "",
+            "qualified_book": ", ".join(best_books.get(best_match_sel, [])) if best_match_sel else "",
+            "qualified_ev": best_match_dec["ev_perc"] if best_match_dec else "",
+            "trap_blocked_reason": match_trap_reason,
+        })
 
         # Track 2: Shadow Ghost DNB
         q_dnb_1 = round(max(q1 * (1.0 - 1.0 / qx), q1 * (1.0 - 1.0 / qx) * 1.02), 2)
@@ -866,12 +1034,11 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
 
         for sel_code, odd_dnb, p_dnb, orig_sel in [("1 DNB", q_dnb_1, p_dnb_1, "1"), ("2 DNB", q_dnb_2, p_dnb_2, "2")]:
             ev_dnb = (p_dnb * odd_dnb) - 1.0
-            if ev_dnb >= 0.050 and 1.30 < odd_dnb < 2.80:
+            if 0.020 <= ev_dnb < 0.080 and 1.30 < odd_dnb < 2.80:
                 b = odd_dnb - 1.0
                 k_star = ev_dnb / b if b > 0 else 0.0
                 q_k = k_star * 0.25
                 c_frac = max(0.0, min(q_k, 0.030))
-                # Shadow bankroll roughly tracking
                 stake_d = round(current_bankroll * c_frac, 2)
                 qualified_dnb_bets.append({
                     "date": t_str[:10],
@@ -889,23 +1056,30 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
     qualified_1x2_bets.sort(key=lambda x: -x['ev_perc'])
     qualified_dnb_bets.sort(key=lambda x: -x['ev_perc'])
 
+    if engine == "v2" and audit_rows:
+        append_v2_audit_rows(audit_rows)
+
     print("\n==========================================================================")
-    print("                    RIEPILOGO SCANSIONE UFFICIALE")
+    print(f"              RIEPILOGO SCANSIONE UFFICIALE ({engine.upper()})")
     print("==========================================================================")
     print(f"[*] Incontri con Quote Verificate Analizzati: {len(target_fixtures) - skipped_no_odds}")
     print(f"[*] Incontri Senza Quote (Saltati per Sicurezza): {skipped_no_odds}")
-    print(f"[*] Selezioni Ufficiali 1X2 Qualificate (EV >= +5.0%): {len(qualified_1x2_bets)}")
+    print(f"[*] Trappole Infortuni/Turnover Bloccate: {traps_blocked}")
+    ev_lbl = "EV in [1.0%, 8.0%)" if engine == "v2" else "EV >= +5.0%"
+    print(f"[*] Selezioni Ufficiali 1X2 Qualificate ({ev_lbl}): {len(qualified_1x2_bets)}")
     print(f"[*] Selezioni Shadow DNB Qualificate: {len(qualified_dnb_bets)}")
 
     # Sanity Anomaly Guard
-    if len(qualified_1x2_bets) > 12:
-        print("\n[ALERT] Rilevato volume anomalo di selezioni (> 12). Controllo di sicurezza attivato.")
+    if len(qualified_1x2_bets) > 15:
+        print("\n[ALERT] Rilevato volume anomalo di selezioni (> 15). Controllo di sicurezza attivato.")
 
     res = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "engine": engine,
         "current_bankroll": current_bankroll,
         "evaluated_fixtures": len(target_fixtures) - skipped_no_odds,
         "skipped_no_odds": skipped_no_odds,
+        "traps_blocked": traps_blocked,
         "qualified_1x2_bets": qualified_1x2_bets,
         "qualified_dnb_bets": qualified_dnb_bets
     }
@@ -925,5 +1099,6 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Deep Pitch Pre-Match Value Scanner")
     parser.add_argument("--publish", action="store_true", help="Append new qualified picks to tracking CSV, push to GitHub and send Telegram digest")
+    parser.add_argument("--engine", choices=["v2", "v1"], default="v2", help="Prediction engine version (default: v2)")
     args = parser.parse_args()
-    run_matchday_scan(publish=args.publish)
+    run_matchday_scan(publish=args.publish, engine=args.engine)

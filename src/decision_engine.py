@@ -15,18 +15,20 @@ def calculate_quarter_kelly(
     min_odds: float = 1.60,
     max_odds: float = 3.10,
     max_cap: float = 0.030,
+    max_ev: float = 1.000,
 ) -> Dict[str, Any]:
     """
     Calcola l'Expected Value e il dimensionamento dello stake con Quarter-Kelly.
 
     Parametri:
-    - prob: probabilità stimata dal modello / calibrazione bayesiana (compresa tra 0.0 e 1.0)
+    - prob: probabilità stimata dal modello / calibrazione (compresa tra 0.0 e 1.0)
     - bookmaker_odds: quota decimale offerta dal bookmaker
     - bankroll: capitale totale attuale (default 1000.0€)
     - min_ev: soglia minima di valore atteso (default 5.0% = 0.050)
     - min_odds: quota minima ammissibile (default 1.60)
     - max_odds: quota massima ammissibile (default 3.10)
     - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 3.0% = 0.030)
+    - max_ev: soglia massima di valore atteso ammissibile (default 100.0% = 1.000; in v2 8.0% anti-adverse-selection)
     """
     if bookmaker_odds <= 1.0 or prob <= 0.0 or prob > 1.0:
         return {
@@ -53,6 +55,15 @@ def calculate_quarter_kelly(
         return {
             "actionable": False,
             "reason": f"EV ({round(ev * 100, 2)}%) inferiore o pari alla soglia minima ({round(min_ev * 100, 2)}%)",
+            "ev_perc": round(ev * 100, 2),
+            "stake_eur": 0.0,
+        }
+
+    # Filtro valore atteso massimo (protezione adverse selection / toxic flow)
+    if ev >= max_ev:
+        return {
+            "actionable": False,
+            "reason": f"EV ({round(ev * 100, 2)}%) sopra soglia massima anti-trappola ({round(max_ev * 100, 2)}%)",
             "ev_perc": round(ev * 100, 2),
             "stake_eur": 0.0,
         }

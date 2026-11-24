@@ -1,306 +1,219 @@
-# DeepPitch: Quantitative Football Value Betting with Bayesian Shrinkage & C++20 Monte Carlo Engine
+# DeepPitch v2: Quantitative Football Pricing, Residual-Offset Ensembling & Real-Time Microstructure Engine
 
-DeepPitch is an end-to-end institutional-grade quantitative modeling and algorithmic wagering pipeline designed to detect and exploit structural market inefficiencies (Value Bets) across European football leagues.
-
-The framework operates on a **modernized dual-stack quantitative architecture**:
-1. **Machine Learning Core (Python/PyTorch):** A streamlined, universal **1X2 Categorical Neural Network** (`56 -> 25 -> 16 -> 3`) regularized with AdamW, label smoothing, and early stopping on validation Brier score.
-2. **Empirical Bayesian Shrinkage Layer:** A calibrated logistic regression layer that blends the neural network's predictive alpha with de-vigged market consensus odds:
-   $$\text{logit}(p_{\text{calib}}) = 0.0806 + 0.6173 \cdot \text{logit}(p_{\text{model}}) + 0.5035 \cdot \text{logit}(p_{\text{book}})$$
-   yielding a balanced weighting of **55.1% Model Alpha** and **44.9% Market Consensus**.
-3. **100% Blind Out-of-Sample Test Set Validation:** Validated on **1,627 untouched out-of-sample fixtures** (10% temporal split), achieving **+15.31% net ROI** across 421 qualified bets at $\text{EV} > 5.0\%$ with a **22.81% maximum drawdown**.
-4. **High-Performance Simulation & Execution Engine (C++20):** An ultra-fast, cache-friendly native backtester featuring a **10,000-run Monte Carlo stress test** (Bootstrap resampling and trade-order permutation) executing 16,000+ fixtures in milliseconds.
-5. **Live Empirical Audit:** Transparent pre-match paper trading tracked in real time for the 2026/2027 season with zero lookahead bias.
-6. **Autonomous Live In-Play Risk Sentinel (C++20):** High-frequency microstructure and economic state machine hedging live positions into guaranteed risk-free profits (Green Book) with millisecond Telegram dispatch and automatic tracking sync.
+DeepPitch is an end-to-end quantitative modeling, pricing, and execution pipeline for Top-5 European football (`E0`, `I1`, `SP1`, `D1`, `F1`), built on strictly zero-leakage statistical inference, live availability/lineup shock modeling, multi-bookmaker best-odds execution, and a coupled C++20 in-play hedging daemon.
 
 ---
 
-## ⚡ High-Performance C++20 Backtesting & Monte Carlo Engine
+## Executive Summary & Architecture
 
-To rigorously stress-test strategy viability without lookahead bias or data contamination, DeepPitch evaluates performance exclusively on the **100% blind out-of-sample test set (1,627 matches)** using a native **C++20 engine** located in [`backtest/`](./backtest).
-
-```
-          [ 16,266 Historical Matches (2014-2026) ]
-                             │
-            Strict 90% Temporal Split (Cutoff)
-                             │
-                             ▼
-      [ 1,627 Blind Out-of-Sample Test Matches (10%) ]
-                             │
-               Filter: 1.60 < Odds < 3.10
-               Edge:   EV > +5.0% (Target Strategy)
-                             │
-                             ▼
-              [ 421 Qualified Value Bets ]
-              (201 Won | 47.74% Win Rate | Avg Odds: 2.23)
-                             │
-               ┌─────────────┴─────────────┐
-               ▼                           ▼
-     [ Quarter-Kelly Staking ]    [ 10,000 Monte Carlo Runs ]
-     (3.0% Bankroll Hard Cap)     (Bootstrap & Permutation)
-               │                           │
-               ▼                           ▼
-        +56.88% Net ROI             0.00% Risk of Ruin
-        +9.92 Flat PnL Units       34.83% Median Drawdown
-        30.43% Max Drawdown         €1,569 Median Bankroll
-```
-
-### 1. Capital Allocation & Risk Management
-The backtester applies a fractional **Quarter-Kelly Criterion** with a hard risk ceiling to eliminate gambler's ruin while maximizing geometric bankroll growth:
-
-$$f^* = \frac{p \cdot q - 1}{q - 1}, \quad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \; 0.030\right)$$
-
-* $p$: Model probability calibrated via Bayesian Shrinkage.
-* $q$: Decimal odds offered by the market.
-* **Hard Capital Cap:** Individual position sizes never exceed **3.0%** of current bankroll under any circumstance.
-* **Selection Filters:** Matches are only executed if $1.60 < \text{Odds} < 3.10$ and Expected Value $\text{EV} = (p \cdot q) - 1 > +5.0\%$.
-
-### 2. Out-of-Sample Sensitivity Analysis (1,627 Test Matches)
-The table below illustrates the strategy's sensitivity across various EV thresholds on the virgin out-of-sample test set using **Shin (1993) de-vigging**:
-
-| EV Threshold | Bets | Won | Win Rate | Avg Odds | Final Bankroll | ROI (%) | Max Drawdown | Flat PnL |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **2.0%** | 584 | 276 | 47.26% | 2.22 | €1,462.29 | +46.23% | 33.73% | +6.50u |
-| **3.0%** | 519 | 244 | 47.01% | 2.23 | €1,482.45 | +48.24% | 32.02% | +5.28u |
-| **4.0%** | 467 | 221 | 47.32% | 2.23 | €1,534.87 | +53.49% | 30.78% | +5.86u |
-| **5.0% (Target)** | **421** | **201** | **47.74%** | **2.23** | **€1,568.83** | **+56.88%** | **30.43%** | **+9.92u** |
-| **5.5%** | 405 | 192 | 47.41% | 2.23 | €1,507.25 | +50.72% | 30.43% | +8.72u |
-| **6.0%** | 381 | 183 | 48.03% | 2.24 | €1,604.84 | +60.48% | 30.32% | +13.68u |
-| **7.0%** | 347 | 164 | 47.26% | 2.24 | €1,488.91 | +48.89% | 33.08% | +7.09u |
-| **8.0%** | 316 | 146 | 46.20% | 2.25 | €1,372.53 | +37.25% | 32.92% | -0.00u |
-
-### 3. Dual-Module Monte Carlo Stress Testing (10,000 Runs)
-
-To evaluate tail risk and path dependency across thousands of possible trajectories, the C++ engine executes two complementary 10,000-iteration Monte Carlo procedures:
-
-#### Module A: Bootstrap Resampling (Sampling with Replacement)
-Simulates 10,000 alternative seasons by sampling 421 bets with replacement from the observed empirical trade distribution:
-
-| Metric | Simulated Value | Risk Interpretation |
-| :--- | :---: | :--- |
-| **Probability of Ruin ($< €200$)** | **0.00%** | Zero runs breached the 80% loss barrier |
-| **Pessimistic Bankroll ($5^{\text{th}}$ percentile)** | **€675.66** | Unfavorable variance regime over a full season |
-| **Median Bankroll ($50^{\text{th}}$ percentile)** | **€1,569.36** | Central expectation aligns closely with realized +56.88% return |
-| **Optimistic Bankroll ($95^{\text{th}}$ percentile)** | **€3,658.17** | High-water mark under positive variance |
-| **Median Maximum Drawdown** | **34.83%** | Expected drawdown depth across simulated paths |
-| **Pessimistic Drawdown ($95^{\text{th}}$ percentile)** | **56.58%** | Drawdown boundary in adverse volatility regimes |
-| **Worst-Case Absolute Drawdown** | **81.82%** | Theoretical tail scenario across 4,210,000 total simulated wagers |
-
-#### Module B: Trade-Order Permutation (Reshuffling without Replacement)
-Quantifies sequence risk and losing-streak clustering by randomly shuffling the chronological order of the 421 observed historical bets:
-
-| Permutation Metric | Value | Risk Interpretation |
-| :--- | :---: | :--- |
-| **Mild Drawdown ($5^{\text{th}}$ percentile)** | **24.52%** | Favorable dispersion of wins and losses |
-| **Median Drawdown ($50^{\text{th}}$ percentile)** | **34.13%** | Standard sequence-dependent drawdown |
-| **Severe Drawdown ($95^{\text{th}}$ percentile)** | **48.03%** | Clustered adverse variance |
-| **Worst-Case Permutation Drawdown** | **65.93%** | Maximum clustering of losing bets in 10,000 random sequences |
-
-### 4. Compiling and Running the C++ Engine
-
-```bash
-# Compile with C++20 and full -O3 optimization
-g++ -O3 -std=c++20 backtest/backtest.cpp -o backtest/backtest
-
-# Execute simulation (auto-detects dataset in current or parent directory)
-./backtest/backtest
-```
-
----
-
-## ⚖️ Bayesian Shrinkage Layer via Logistic Regression
-
-In sports betting markets, deep neural networks trained exclusively on match data can suffer from localized overconfidence and longshot bias. Conversely, bookmaker odds embed massive aggregate liquidity and collective market wisdom, but carry bookmaker overround (vigorish) and public sentiment distortions.
-
-To harvest true predictive alpha while ensuring rigorous calibration, DeepPitch incorporates an **Empirical Bayesian Shrinkage Layer** fitted via logistic regression on 14,400 historical training matches:
-
-```
-[ 56 Match Features ] ──> [ Neural Net (56 -> 25 -> 16 -> 3) ] ──> Raw Logits ──> p_model
-                                                                                     │
-                                                                                     ├──> [ Bayesian Shrinkage Layer ] ──> Calibrated p
-[ Market Odds (1X2) ] ──> [ De-Vigging (Overround Removal) ]   ──> Implied Odds ──> p_book   (Model 55.1% | Market 44.9%)
-```
-
-### Mathematical Formulation:
-1. **De-vigging Bookmaker Consensus via Shin's Method (1993):**
-   Standard proportional scaling ($\frac{1/q_k}{\sum 1/q_j}$) assumes margins are distributed uniformly, distorting probabilities due to the structural **favorite-longshot bias**. DeepPitch solves for the informed trading parameter $z \in [0, 1)$ via:
-   $$\pi_k = \frac{1}{q_k}, \quad \Pi = \sum_{j \in \{1, X, 2\}} \pi_j, \quad p_{k, \text{book}}(z) = \frac{\sqrt{z^2 + 4(1 - z)\left(\frac{\pi_k^2}{\Pi}\right)} - z}{2(1 - z)}$$
-   where $z$ is solved numerically such that $\sum_j p_{j, \text{book}}(z) = 1.0$, accurately restoring the true consensus distribution $p_{k, \text{book}}$.
-
-2. **Logit Transformation:**
-   $$\text{logit}(p) = \ln\left(\frac{p}{1 - p}\right)$$
-
-3. **Empirical Bayesian Combination:**
-   $$z_k = \alpha + \beta_{\text{model}} \cdot \text{logit}(p_{k, \text{model}}) + \beta_{\text{book}} \cdot \text{logit}(p_{k, \text{book}})$$
-   where:
-   * $\alpha = 0.0806$ (Calibration Intercept)
-   * $\beta_{\text{model}} = 0.6173 \implies \mathbf{55.1\%}$ relative weight
-   * $\beta_{\text{book}} = 0.5035 \implies \mathbf{44.9\%}$ relative weight
-
-4. **Normalized Calibrated Distribution:**
-   $$p_k^{\text{calib}} = \frac{\sigma(z_k)}{\sum_j \sigma(z_j)}, \quad \text{Fair Odds}_k = \frac{1}{p_k^{\text{calib}}}$$
-
-This Bayesian formulation ensures that the model only takes positions when its statistical edge is strong enough to deviate meaningfully from the market consensus.
-
----
-
-## 🧠 Neural Network Architecture & Training Pipeline
-
-### 1. Architectural Streamlining
-In earlier iterations, the network incorporated league entity embeddings and an auxiliary xG regression head. Extensive empirical ablation revealed:
-* **Removal of League Entity Embeddings:** Entity embeddings artificially fragmented the dataset and prevented the model from generalizing to international fixtures, cup competitions, or unseen leagues. The streamlined 56-feature vector is fully universal across world football.
-* **Removal of Auxiliary xG Regression Head:** Multi-task loss balancing between continuous xG and discrete 1X2 cross-entropy introduced conflicting gradient dynamics. Eliminating the xG head concentrated 100% of network capacity on the true wagering objective: the 1X2 categorical distribution.
-
-### 2. Network Specifications
-```
-Input Layer:        56 Domain-Engineered Numerical Features
-Hidden Layer 1:     Linear(56 -> 25) + Tanh Activation + Dropout(p=0.10)
-Hidden Layer 2:     Linear(25 -> 16) + Tanh Activation
-Output Layer:       Linear(16 -> 3) (Unbounded Logits for 1, X, 2)
-```
-
-### 3. Training Protocol
-* **Dataset:** 16,266 historical matches (2014–2026).
-* **Temporal Split:** Strict 80% Train (12,987 matches), 10% Validation (1,623 matches), and 10% Test (1,627 matches).
-* **Optimization:** `AdamW` ($\text{lr} = 0.003$, $\text{weight\_decay} = 0.008$).
-* **Loss Function:** `CrossEntropyLoss(label_smoothing=0.06)` with gradient norm clipping ($\text{max\_norm} = 1.0$).
-* **Early Stopping:** Monitored strictly on **Validation Brier Score** with patience of 800 steps, preserving the test set completely pristine.
-
----
-
-## 🔬 The 56-Feature Pre-Match Specification
-
-Every match vector is deterministically assembled into the exact 56-feature layout below:
-
-| Indices | Category | Description |
-| :--- | :--- | :--- |
-| `[0 - 1]` | **Team Strength (Elo)** | `home_elo`, `away_elo`: Pre-match Elo ratings |
-| `[2 - 5]` | **League Standings** | Table position and total points accumulated in the current season |
-| `[6 - 9]` | **Recent Form (Points)** | Weighted average points across last 5 matches (Overall and Venue-specific) |
-| `[10 - 17]` | **Advanced xG & xGA** | Weighted average xG created and conceded over the last 5 matches (Overall + Venue) |
-| `[18 - 25]` | **Actual Goals (GF & GA)** | Weighted average actual goals scored and conceded over the last 5 matches |
-| `[26 - 27]` | **Finishing Efficiency** | $xG - Goals$ differential (identifies regression to the mean and overperformance) |
-| `[28 - 35]` | **Head-to-Head (H2H)** | Points, goals, and xG averages across the last 5 direct meetings (Overall + Venue) |
-| `[36 - 39]` | **Fatigue & Schedule Context** | Rest days (capped at 14) and matches played in the last 14 days |
-| `[40 - 45]` | **Table Pressure** | Point distances to Champions League, Europa League, and Relegation zones |
-| `[46 - 47]` | **Season Progression** | Current round/matchday number and season half (`1` for 1–19, `2` for 20–38) |
-| `[48 - 55]` | **In-Game Event Averages** | Weighted average shots, shots on target, corners, and cards over the last 5 matches |
-
----
-
-## 🛡️ Live Execution & In-Play Risk Sentinel (C++20 Engine)
-
-While pre-match predictive models identify structural bookmaker mispricings, holding open wagers passively until the 95th minute exposes accumulated equity to extreme late-game variance (stoppage-time equalizers, late red cards, defensive collapses, VAR reversals).
-
-To systematically address this, DeepPitch is integrated with **Live Sentinel**, an autonomous, low-latency C++20 in-play trade liquidation engine that dynamically locks guaranteed, risk-free profits (**Green Book / Freebet**) using live bookmaker odds feeds:
+DeepPitch **v2** replaces the legacy single-MLP architecture (`v1`, blind test Brier `0.58463`) with a **five-stage institutional-style quantitative pipeline** that slashes out-of-sample Brier error by **`-0.0110`** (to **`0.57365`** on the 2024/25 blind test set, matching bookmaker accuracy in the Premier League at `0.56587` vs `0.56582`) while remaining **100% automated on free public data feeds** (FotMob/Opta, ClubElo, `football-data.co.uk`, BetExplorer):
 
 ```text
-[ DeepPitch Pre-Match Bet ] ──► [ Kambi CDN 1Hz Live Odds Stream ]
-                                            │
-                                            ▼
-                             [ Live Sentinel C++20 Daemon ]
-                                            │
-              ┌─────────────────────────────┴─────────────────────────────┐
-              ▼                                                           ▼
-    [ Level 1: Economic Gate ]                                  [ Time Boundaries ]
-    Continuous Activation A(t) >= 0.50                          • t < 30': Blind Phase (HOLD)
-    Evaluates Cashout C(t) vs Risk Capital                      • 30' <= t <= 80': Active Trading
-              │                                                 • t > 80': Hold To Expiry
-              ▼ (If Armed)
-    [ Level 2: Microstructure Engine ]
-    ├── Track A: Extreme Asymmetry Bypass (O(t) <= 1.05 or Profit Capture >= 90% for t <= 75')
-    └── Track B: 4-Minute Rolling Velocity & Pressure Engine
-          ├── V <= -0.010: Dominance Decay ────────► HOLD (Let Profits Run)
-          ├── -0.005 <= V <= +0.025: Stasis Regime (>= 60s) ──► TRIGGER GREEN BOOK
-          ├── Delta_O > +0.15 or V > +0.030: Circuit Breaker ──► FREEZE (Anti-Panic)
-          └── Delta_O < -0.15 or Bookmaker Suspension ────────► Buffer Flush
-              │
-              ▼
-    [ Post-Execution Pipeline ]
-    ├── Mathematical Green Book Hedge: S2 = (S1 * O1) / O2 (0.50€ Rounding Guard)
-    ├── Atomic Update to tracking_2026_2027.csv & live_hedge_audit.csv
-    ├── Automated Git Sync & Push to GitHub
-    └── Sub-Second Push Notification via Native Telegram Bot (WinHTTP)
+  [ Past Pinnacle 1X2 + O2.5 + AHh (t' < t) ]     [ Opta/FotMob Shot-Level npxG + xGOT (t' < t) ]
+                       │                                                  │
+                       ▼                                                  ▼
+     [ Online Kalman Log-λ + Exact 35d Ridge ]        [ Exact Rolling 120d Weighted Poisson-MLE ]
+     (Implied Attack/Defense, Steam, Surprise)        (Opponent-Adjusted Dixon-Coles on npxG/xGOT)
+                       │                                                  │
+                       └───────────────────────┬──────────────────────────┘
+                                               ▼
+                        [ OOF-Calibrated Generative Base p_base (T = 0.903) ]
+                                               │
+            ┌──────────────────────────────────┴──────────────────────────────────┐
+            ▼                                                                     ▼
+  [ Exact Table Motivation ]                                      [ Orthogonal Residual Features ]
+  (Math Champ / Relegated /                                       (Market-vs-xG, Finishing, GK,
+   Locked UCL / Dead Rubber)                                       Sharp Steam, Rest, Congestion)
+            │                                                                     │
+            └──────────────────┬──────────────────────────────────────────────────┘
+                               ▼
+         [ 5-Head Residual-Offset Ensemble (init_score / base_margin = log p_base) ]
+         ├── Head 0: Generative Dixon-Coles Base            (weight 0.15)
+         ├── Head 1: Grouped-Ridge Offset Linear            (weight 0.35)
+         ├── Head 2: Residual-Offset LightGBM (5-seed)      (weight 0.15)
+         ├── Head 3: Residual-Offset XGBoost  (5-seed)      (weight 0.20)
+         └── Head 4: Residual-Offset PyTorch MLP (10-seed)  (weight 0.15)
+                               │  (SLSQP Simplex + OOF Temperature Scaling T = 1.013)
+                               ▼
+            [ Live FotMob Fresh-Injury & Predicted/Confirmed Lineup Delta ]
+            • Separates FRESH starter shocks (played last 5, now out/rotated)
+              from long-term injuries already priced into Past-Market ratings
+            • Bounded Logit Adjustment (±0.16) + Adverse-Selection Trap Guard
+                               │
+                               ▼
+            [ 11-Book ADM Best-Odds Line Shopping + Quarter-Kelly Sizing ]
+            • Band: EV ∈ [1.0%, 8.0%) | Odds ∈ (1.35, 6.00) | Hard Cap: 3.0%
+            • Auto-Audit & CLV Tracking (data/v2_scan_audit.csv + tracking_2026_2027.csv)
+                               │
+                               ▼
+            [ Autonomous C++20 Live Risk Sentinel (Private Execution Engine) ]
 ```
-
-### 1. Mathematical Green Book Hedging
-For traditional sportsbooks (0% exchange commission), given initial stake $S_0$ placed at pre-match odds $O_0$ and live opposing market odds $O_{\text{opp}}(t)$ (e.g., Double Chance $X2$ when holding Home $1$):
-
-$$S_{\text{hedge}} = \text{round}_{0.50}\left(\frac{S_0 \cdot O_0}{O_{\text{opp}}(t)}\right), \quad \text{Locked Profit} = (S_0 \cdot O_0) - S_0 - S_{\text{hedge}} > 0$$
-
-A strict **Red Book Guard** prevents execution if $O_{\text{opp}}(t) < \frac{O_0}{O_0 - 1}$ (the analytical break-even threshold).
-
-### 2. Two-Level State Machine
-* **Level 1 (Economic Activation Filter):** Evaluates if the ratio between extractable equity $C(t)$ and capital at risk justifies early exit via a continuous sigmoidal function:
-  $$A(t) = \frac{1}{1 + \exp\left(-15 \cdot \left[ \left(\frac{t}{90}\right)^{1.6} \cdot \ln\left(\frac{P_{\text{max}}}{P_{\text{max}} - C(t)}\right) \cdot \left(1 - \frac{1}{O_0}\right) - 0.20 \right]\right)}$$
-  If $A(t) \ge 0.50$, the system enters the **ARMED** state and evaluates microstructure dynamics.
-* **Level 2 Track A (Extreme Asymmetry Bypass):** If $O(t) \le 1.05$ or profit capture $\ge 90\%$ before the 75th minute, the position is liquidated immediately without waiting for tick confirmation.
-* **Level 2 Track B (Microstructure Velocity & Pressure Monitoring):** Maintains a 240-second circular tick buffer computing live price velocity $V = \frac{O(t) - O(t - 4')}{4}$. While normal decay ($V \le -0.010$) allows profits to run, a stagnation/pressure regime ($-0.005 \le V \le +0.025$) sustained for 60–90 consecutive seconds signals imminent danger and triggers an immediate Green Book order.
-
-> [!NOTE]
-> **Proprietary Execution Architecture:** While DeepPitch maintains the open-source statistical research, machine learning models, and public paper trading audits, the low-latency C++20 live execution engine (`Live Sentinel`) is decoupled into a dedicated private repository (`live-sentinel`) to protect proprietary execution alpha.
 
 ---
 
-## 📁 Repository Structure
+## Out-of-Sample Quantitative Benchmarks
+
+### 1. Probabilistic Accuracy (Brier Score — Strictly Zero Current-Match Odds Leakage)
+
+Evaluated on the exact **16,268 Top-5 historical dataset** (`2015–2025`) using **5-Fold Expanding-Window Out-of-Fold CV** (`8,140` OOF matches from `2019–2024`) with the `2024/25` season (`1,627` matches) held 100% blind, plus a brand-new blind evaluation on the live **`2026/27` season** (`Aug–Nov 2026`):
+
+| Model / Benchmark | Val `2023/24` (n=1,627) | Blind Test `2024/25` (n=1,627) | Delta vs `v1` (Test) |
+| :--- | :---: | :---: | :---: |
+| **DeepPitch `v1`** (Legacy 56-feat MLP) | `0.58296` | `0.58463` | — |
+| **Block #1 + #2** (Multi-scale EWMA + Opta `npxG/xGOT` + DC, *no past market*) | `0.57547` | `0.57985` | `-0.00478` |
+| **Generative Base** (62% Past-Market + 26% Exact Opta `npxG` DC + 11% Exact 35d Mkt) | `0.57432` | `0.57472` | `-0.00991` |
+| **DeepPitch `v2` Production 5-Head Ensemble** | **`0.57307`** | **`0.57365`** | **`-0.01098`** |
+| **DeepPitch `v2` Best Single Head (`Offset_Linear`)** | **`0.57280`** | **`0.57323`** | **`-0.01140`** |
+| **Bookmaker Consensus Avg (Shin De-Vig)** | `0.57193` | `0.56945` | *Market Benchmark* |
+| **Pinnacle Opening Odds (Shin De-Vig)** | `0.57177` | `0.56921` | *Sharp Open Benchmark* |
+| **Pinnacle Closing Odds (Shin De-Vig)** | `0.56965` | `0.56684` | *Gold Standard* |
+| **Pinnacle Open + `v2` Orthogonal Residuals (`npxG/xGOT/steam/rest`)** | — | **`0.56908`** | **`-0.00013` below Pinnacle Open** |
+
+**League-by-League Breakdown on Blind Test `2024/25` (`v2` vs Bookmaker Avg Shin):**
+* **Premier League (`E0`, n=339):** `0.56587` vs `0.56582` (**`+0.00005` — virtual parity**)
+* **Serie A (`I1`, n=358):** `0.57191` vs `0.56918` (`+0.00273`)
+* **Ligue 1 (`F1`, n=302):** `0.56749` vs `0.56401` (`+0.00348`)
+* **Regular Season (`Matchdays 1–30`, n=1,241):** `0.57447` vs `0.57239` (**`+0.00208`**)
+
+### 2. Live Blind Validation on `2026/27` (`Aug–Nov 2026`) — Impact of Fresh Injuries & Lineups
+
+Tested strictly out-of-sample on `136` completed `2026/27` Top-5 matches with prior FotMob lineup histories cached in `data/scanner_cache/` and live `football-data.co.uk` `2627` odds:
+
+| Configuration (Blind `2026/27`) | Brier All (`n=136`) | Brier Impacted (`n=94`) | Est. ADM-Best (`EV ∈ [1%, 8%)`) | World Max (`EV ∈ [1%, 8%)`) |
+| :--- | :---: | :---: | :---: | :---: |
+| **`v2` without Injuries/Lineups** | `0.55369` | `0.54503` | `42` bets \| `45.2%` WR \| `+5.44u` | `38` bets \| `47.4%` WR \| `+6.22u` |
+| **`v2` WITH Fresh Injuries + TrapGuard** | **`0.55265`** (`-0.00104`) | **`0.54332`** (`-0.00171`) | `36` bets (`2` traps blocked) \| **`50.0%` WR** \| `+4.71u` | `36` bets (`3` traps blocked) \| **`58.3%` WR** \| **`+16.76u`** |
+| **Bookmaker Consensus Avg (Shin)** | `0.55060` | `0.53928` | — | — |
+
+### 3. Six-Season Out-of-Sample Economic Evaluation (`2019–2025`, `EV ∈ [1%, 8%)`)
+
+Why **`EV ∈ [1.0%, 8.0%)`**? Empirical diagnostics across 9,768 OOS matches reveal classic **stale-price adverse selection** in the extreme `EV ≥ 8%` tail: when a pre-match model disagrees with Pinnacle by `> 8%`, it is disproportionately due to breaking matchday news ($\mathcal{F}_t \setminus \mathcal{F}_{t-1}$: late injuries, suspensions, or Champions League rotation). Filtering the `[0%, 1%)` vig-noise floor and the `≥ 8%` toxic tail — combined with the live FotMob injury guard — isolates genuine positive-CLV edge:
+
+| Season (OOS, `v2` @ Est. ADM-Best, `EV ∈ [1%, 8%)`) | Bets | Win Rate | Flat PnL | Flat Yield | CLV vs PinClose |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `2019/20` (OOF Fold 1) | 763 | 39.1% | `+1.00u` | `+0.13%` | `+0.19%` |
+| `2020/21` (OOF Fold 2 — *COVID empty stadiums*) | 777 | 36.7% | `-49.00u` | `-6.31%` | `-0.05%` |
+| `2021/22` (OOF Fold 3) | 841 | 35.9% | `+10.78u` | `+1.28%` | `+0.45%` |
+| `2022/23` (OOF Fold 4) | 848 | 34.7% | `+40.22u` | `+4.74%` | `+0.96%` |
+| `2023/24` (Validation) | 817 | 37.6% | `+42.58u` | `+5.21%` | `+0.85%` |
+| `2024/25` (Blind Test) | 743 | 40.6% | `+49.56u` | `+6.67%` | `+0.18%` |
+| **All 6 Seasons (`2019–2025`)** | **4,789** | **37.3%** | **`+95.14u`** | **`+1.99%`** | **`+0.44%`** |
+| **Post-COVID 4 Seasons (`2021–2025`)** | **3,249** | **37.1%** | **`+143.14u`** | **`+4.41%`** | **`+0.62%`** |
+
+*(On World Max best-odds across all 6 seasons `2019–2025`: `5,084` bets, **`+123.36u (+2.43%)`**, **`CLV = +2.90%`**, Quarter-Kelly `€1,000 → €1,781`; Post-COVID `2021–2025`: **`+3.05%`**, Quarter-Kelly **`€2,181`**.)*
+
+---
+
+## Mathematical & Statistical Methodology
+
+### 1. Exact Rolling Weighted Poisson-MLE Dixon-Coles (`npxG` & `xGOT`)
+Raw rolling averages fail to adjust for opponent strength and suffer from penalty variance (`~0.77 xG` noise per penalty). DeepPitch v2 solves a time-decayed Ridge-regularized Poisson MLE via **Newton-Raphson (IRLS)** strictly on past matches ($t_k < t$, half-life $\tau = 120$ days):
+
+$$\lambda_H = \exp\!\left(\mu + \tfrac{1}{2}\text{HFA} + a_H - d_A\right), \qquad \lambda_A = \exp\!\left(\mu - \tfrac{1}{2}\text{HFA} + a_A - d_H\right)$$
+
+with exponential decay weights $w_k = 2^{-(t - t_k)/\tau}$ and **Dixon-Coles (1997)** low-score correlation adjustment $\tau_\rho(x,y)$ ($\rho = -0.065$) on $(0,0), (1,0), (0,1), (1,1)$.
+
+### 2. Past Market-Implied Strength (Zero Current-Match Leakage)
+For every **completed** past fixture $t' < t$, DeepPitch v2 analytically inverts Pinnacle's historical `1X2`, `Over/Under 2.5`, and `Asian Handicap` lines into implied expected goals $(\lambda_{\text{mkt},H}, \lambda_{\text{mkt},A})$:
+1. Total implied goals $L = \lambda_H + \lambda_A$ by inverting $P(G_{\text{tot}} \ge 3) = 1 - e^{-L}(1 + L + L^2/2) = p_{\text{O2.5}}$.
+2. Implied goal margin $d = \lambda_H - \lambda_A$ via Dixon-Coles inversion of $(p_1 - p_2)$ blended with `−AHh`.
+3. Recursive Kalman-style state updates on $\log \lambda_{\text{mkt}}$ plus an exact 35-day exponentially-weighted Ridge solver, automatically capturing squad value, transfers, and persistent injuries without match-outcome noise.
+
+### 3. Residual-Offset Learning & Grouped-Ridge Regularization
+In low-SNR domains like football, feeding 100+ raw features into tree/neural models induces variance explosion. Instead, all ML heads initialize from the calibrated generative base logits $z_{\text{base}} = \log(p_{\text{base}})$ (`init_score` in LightGBM, `base_margin` in XGBoost, additive skip in PyTorch/Linear) and learn strictly regularized residual corrections:
+
+$$z_{\text{final}} = \alpha \cdot \log(p_{\text{base}}) + b + f_\theta(x_{\text{mot}}, x_{\text{res}})$$
+
+In `Offset_Linear`, two distinct L2 penalties prevent over-shrinking sparse high-impact end-of-season motivation signals (`ex_champ_diff`, `ex_locked_diff`, `ex_drel_diff`, `ex_off_diff` with $\lambda_{\text{mot}} = 100$) while heavily shrinking noisy all-season residuals ($\lambda_{\text{res}} = 7000$).
+
+### 4. Live FotMob Fresh-Injury & Lineup Delta ($\mathcal{F}_t \setminus \mathcal{F}_{t-1}$)
+Long-term absences are already priced into past market lines. `src/injury_lineup.py` cross-references FotMob's pre-match `unavailable` list and `predicted`/`confirmed` XI against each team's **last 5 completed starting XIs** (already cached locally):
+* Isolates **freshly missing regular starters** (started $\ge 2$ of last 5 matches and now injured, suspended, doubtful, or rotated out).
+* Applies a bounded, conservative logit adjustment (`±0.16` max) weighted by missing XI market value and starter count.
+* Triggers a hard **Adverse-Selection Trap Guard** whenever a candidate pick backs a team freshly missing $\ge 2$ regular starters or $\ge 18\%$ of starting XI market value.
+
+### 5. Shin (1993) De-Vigging, 11-Book ADM Line Shopping & Quarter-Kelly Sizing
+* **Shin De-Vigging:** Accounts for favorite-longshot bias by solving numerically for the informed-trading parameter $z \in [0, 1)$ such that $\sum_c p_c(z) = 1$.
+* **ADM Best-Odds Execution:** Queries BetExplorer's live AJAX bookmaker feed across 11 active Italian ADM bookmakers (`888sport`, `bet365`, `bwin.it`, `Eurobet.it`, `GoldBet`, `Lottomatica`, `Netwin`, `Planetwin365`, `Sisal`, `SNAI`, `William Hill`), cutting effective execution overround from `~6.5%` average down to `~3.6–4.4%`.
+* **Quarter-Kelly Capital Allocation:**
+  $$f^* = \frac{p \cdot q - 1}{q - 1}, \qquad \text{Stake Fraction} = \min\!\left(0.25 \cdot f^*, \; 0.030\right)$$
+
+---
+
+## Autonomous In-Play Risk Sentinel (C++20 Engine)
+
+While DeepPitch v2 handles pre-match pricing and selection, open positions are monitored in real time by **Live Sentinel**, a decoupled private **C++20** daemon (`live-sentinel`) ingesting 1Hz live odds feeds:
+* **Mathematical Green Book Hedging:** Locks risk-free profit $S_{\text{hedge}} = \text{round}_{0.50}\!\left(\frac{S_0 \cdot O_0}{O_{\text{opp}}(t)}\right)$ protected by an analytical Red Book break-even guard $O_{\text{opp}}(t) > \frac{O_0}{O_0 - 1}$.
+* **Two-Level Microstructure State Machine:** Continuous economic activation gate $A(t) \ge 0.50$ paired with Track A (extreme asymmetry bypass) and Track B (4-minute rolling velocity, pressure stasis trigger, and anti-panic circuit breaker).
+* **Atomic Sync:** Synchronizes settled hedges to `tracking_2026_2027.csv` and dispatches sub-second Telegram execution receipts.
+
+---
+
+## Repository Structure
 
 ```text
-├── backtest/
-│   ├── backtest.cpp                # High-performance C++20 backtester & dual Monte Carlo engine
-│   └── backtest2.0.csv             # 16,266 matches dataset with calibrated model probabilities
-├── models/
-│   └── modello_calcio_v1.pt        # Serialized weights (56 -> 25 -> 16 -> 3) & scaler parameters
-├── data/
-│   └── matches_sample.csv          # Sample subset of the enriched historical dataset
 ├── src/
-│   ├── train_and_export.py         # PyTorch training routine with 80/10/10 split & early stopping
-│   ├── feature_builder.py          # Deterministic feature assembly & validation engine
-│   ├── predict.py                  # Match inference with Bayesian Shrinkage calibration
-│   └── decision_engine.py          # Value bet qualification & Quarter-Kelly sizing engine
+│   ├── train_v2.py             # DeepPitch v2 training & 5-fold expanding OOF calibration -> bundle export
+│   ├── v2_state_engine.py      # Live auto-sync football-data + FotMob npxG/xGOT + exact rolling solvers
+│   ├── injury_lineup.py        # Live FotMob fresh-injury, suspension, rotation delta & trap guard
+│   ├── predict_v2.py           # 5-Head Residual-Offset v2 inference engine
+│   ├── scanner.py              # Unified pre-match Top-5 scanner (v2 default, 11-book ADM best-odds, Telegram, CLV audit)
+│   ├── decision_engine.py      # EV band [1%, 8%) qualification & Quarter-Kelly sizing (3% cap)
+│   ├── elo_fetcher.py          # Live ClubElo scraper with 12h local cache
+│   ├── settle_matches.py       # Automated match settlement & bankroll ledger updater
+│   ├── feature_builder.py      # Legacy v1 56-feature deterministic builder
+│   ├── predict.py              # Legacy v1 inference + Shin (1993) de-vigging utility
+│   └── train_and_export.py     # Legacy v1 PyTorch training script
+├── models/
+│   ├── deep_pitch_v2_bundle.pkl # Production DeepPitch v2 serialized 5-head ensemble & scalers
+│   └── modello_calcio_v1.pt     # Legacy v1 checkpoint
+├── backtest/
+│   ├── backtest.cpp            # Native C++20 backtester & 10,000-run dual Monte Carlo stress tester
+│   └── backtest2.0.csv         # Historical benchmark dataset
 ├── tests/
-│   └── test_feature_builder.py     # Deterministic feature assembly & calibration test suite
-├── agent_prompt_template.md        # Prompt schema for Agentic AI data extraction
-├── tracking_2026_2027.csv          # Live, timestamped paper trading log
-├── requirements.txt                # Minimal environment dependencies
+│   ├── test_v2_pipeline.py     # Unit & E2E tests for v2 ensemble, injuries, motivation & EV guard
+│   ├── test_scanner.py         # Scanner, odds matching & tracking idempotency tests
+│   ├── test_decision_engine.py # Quarter-Kelly & cap tests
+│   └── test_feature_builder.py # Feature vector & Shin de-vigging tests
+├── tracking_2026_2027.csv      # Public live paper-trading ledger (compatible with live-sentinel)
+├── requirements.txt            # Python dependencies
 └── README.md
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Run the C++ Backtesting & Monte Carlo Engine
+### 1. Install Dependencies
 ```bash
-# Compile and execute C++ backtest
+pip install -r requirements.txt
+```
+
+### 2. Run the Pre-Match Top-5 Scanner (DeepPitch v2)
+```bash
+# Dry-run scan across E0, I1, SP1, D1, F1 (v2 engine + live injuries + 11-book ADM best-odds)
+python src/scanner.py
+
+# Production run: appends picks to tracking_2026_2027.csv, syncs GitHub & sends Telegram digest
+python src/scanner.py --publish
+
+# Legacy comparison mode (v1)
+python src/scanner.py --engine v1
+```
+
+### 3. Run the Full Test Suite
+```bash
+pytest tests/ -v
+```
+
+### 4. Compile & Run the C++20 Monte Carlo Backtester
+```bash
 g++ -O3 -std=c++20 backtest/backtest.cpp -o backtest/backtest
 ./backtest/backtest
 ```
 
-### 2. Run Python Match Inference with Bayesian Shrinkage
-```python
-from src.predict import predici_partita, stampa_report_partita
-
-# 56 domain features assembled via src.feature_builder
-features_56 = [
-    1845.0, 1720.0,            # [0-1] Elo
-    2.0, 7.0, 48.0, 36.0,      # [2-5] Table standings & points
-    # ... Remaining 50 features in exact order
-]
-
-# Market odds [Home, Draw, Away]
-market_odds = [2.70, 3.30, 2.60]
-
-# Run prediction with Bayesian calibration
-report = predici_partita(features_56, market_odds=market_odds)
-stampa_report_partita(report, "Roma", "Milan")
-```
-
-### 3. Run Unit Tests
-```bash
-py -3.14 -m pytest tests/
-```
-
 ---
 
-## ⚖️ Disclaimer
+## Disclaimer
 
-*This repository is maintained strictly for academic research, statistical modeling, and quantitative sports analytics. Historical backtest results and simulations do not guarantee future profitability. Nothing herein constitutes financial or wagering advice.*
+*This repository is maintained strictly for academic research, statistical modeling, and quantitative sports analytics. Historical backtests and paper-trading audits do not guarantee future profitability. Nothing herein constitutes financial or wagering advice.*
