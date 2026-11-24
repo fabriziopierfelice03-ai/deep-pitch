@@ -245,10 +245,11 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
         ]
         
         for b in new_bets:
+            book_tag = f" [{b['best_bookmakers']}]" if b.get('best_bookmakers') else ""
             msg_lines.extend([
                 f"⚽ *{b['match_clean']}*",
                 f"• Lega: *{b['league']}* | Data: *{b['date_csv']}*",
-                f"• Segno: *{b['selection']}* @ *{b['bookmaker_odds']:.2f}* (Fair: {b['fair_odds']:.2f})",
+                f"• Segno: *{b['selection']}* @ *{b['bookmaker_odds']:.2f}*{book_tag} (Fair: {b['fair_odds']:.2f})",
                 f"• Prob. Modello: *{b['model_prob']:.1f}%* | EV: *+{b['ev_perc']:.2f}%*",
                 f"• Stake Quarter-Kelly: *€{b['stake_eur']:.2f}* ({b['applied_fraction']:.2f}%)\n"
             ])
@@ -296,8 +297,8 @@ def extract_page_props(data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
     return data.get('pageProps', data)
 
-def scrape_betexplorer_odds(url: str) -> Dict[str, Tuple[float, float, float]]:
-    """Scrapes authentic consensus decimal odds from BetExplorer fixture page."""
+def scrape_betexplorer_odds(url: str) -> Dict[str, Dict[str, Any]]:
+    """Scrapes authentic consensus decimal odds and match links from BetExplorer fixture page."""
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
     odds_map = {}
     try:
@@ -309,6 +310,7 @@ def scrape_betexplorer_odds(url: str) -> Dict[str, Tuple[float, float, float]]:
                     match_link = re.search(r'<a href="([^"]*)" class="in-match">(.*?)</a>', r, re.DOTALL)
                     odds = re.findall(r'data-odd="([0-9\.]+)"', r)
                     if match_link and len(odds) >= 3:
+                        href = match_link.group(1).strip()
                         title = re.sub(r'<[^>]+>', '', match_link.group(2)).strip()
                         parts = title.split(' - ')
                         if len(parts) == 2:
@@ -316,12 +318,83 @@ def scrape_betexplorer_odds(url: str) -> Dict[str, Tuple[float, float, float]]:
                             a_norm = norm_team(parts[1])
                             key = f"{h_norm}_{a_norm}"
                             try:
-                                odds_map[key] = (float(odds[0]), float(odds[1]), float(odds[2]))
+                                odds_map[key] = {
+                                    "avg": (float(odds[0]), float(odds[1]), float(odds[2])),
+                                    "href": href,
+                                }
                             except Exception:
                                 pass
     except Exception as e:
         print(f"  [WARN] Impossibile scaricare quote da {url}: {e}")
     return odds_map
+
+def fetch_betexplorer_best_odds(match_href: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetches live per-bookmaker 1X2 odds across active Italian ADM bookmakers
+    from BetExplorer's AJAX endpoint and returns the best available odd and
+    bookmaker names for each outcome ('1', 'X', '2').
+    """
+    if not match_href:
+        return None
+    parts = [p for p in match_href.strip('/').split('/') if p]
+    if not parts:
+        return None
+    match_id = parts[-1]
+    ep = f"https://www.betexplorer.com/match-odds/{match_id}/0/1x2/odds/?lang=it"
+    ref = f"https://www.betexplorer.com{match_href}" if match_href.startswith('/') else match_href
+    req = urllib.request.Request(
+        ep,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': ref,
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read().decode('utf-8', errors='ignore'))
+        odds_html = payload.get('odds', '')
+        if not odds_html:
+            return None
+
+        bookies = []
+        for attrs, row in re.findall(r'<tr([^>]*)>(.*?)</tr>', odds_html, re.DOTALL):
+            if 'inactive' in attrs.lower():
+                continue
+            vals = re.findall(r'data-odd="([0-9\.]+)"', row)
+            if len(vals) < 3:
+                continue
+            m_ev = re.search(r"'event-name'\s*:\s*'([^']+)'", row)
+            if m_ev:
+                bname = m_ev.group(1).strip()
+            else:
+                m_t = re.search(r'title="([^"]+)"', row)
+                bname = m_t.group(1).strip() if m_t else "Bookmaker"
+            try:
+                q1, qx, q2 = float(vals[0]), float(vals[1]), float(vals[2])
+                if q1 > 1.01 and qx > 1.01 and q2 > 1.01:
+                    bookies.append((bname, q1, qx, q2))
+            except ValueError:
+                continue
+
+        if not bookies:
+            return None
+
+        best_q = {}
+        best_books = {}
+        for idx, sel in enumerate(("1", "X", "2"), start=1):
+            max_val = max(b[idx] for b in bookies)
+            names = [b[0] for b in bookies if abs(b[idx] - max_val) < 1e-6]
+            best_q[sel] = max_val
+            best_books[sel] = names
+
+        return {
+            "best": (best_q["1"], best_q["X"], best_q["2"]),
+            "books": best_books,
+            "n_bookmakers": len(bookies),
+        }
+    except Exception:
+        return None
 
 BETEXP_ALIASES = {
     "manchesterunited": "manchesterutd",
@@ -333,18 +406,21 @@ BETEXP_ALIASES = {
     "parissaintgermain": "psg",
 }
 
-def find_matched_odds(home_name: str, away_name: str, odds_map: Dict[str, Tuple[float, float, float]]) -> Optional[Tuple[float, float, float]]:
+def find_matched_odds(home_name: str, away_name: str, odds_map: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     h_k = BETEXP_ALIASES.get(norm_team(home_name), norm_team(home_name))
     a_k = BETEXP_ALIASES.get(norm_team(away_name), norm_team(away_name))
     direct_key = f"{h_k}_{a_k}"
-    if direct_key in odds_map:
-        return odds_map[direct_key]
-    for k, v in odds_map.items():
-        parts = k.split('_')
-        if len(parts) == 2:
-            if (h_k in parts[0] or parts[0] in h_k) and (a_k in parts[1] or parts[1] in a_k):
-                return v
-    return None
+    entry = odds_map.get(direct_key)
+    if entry is None:
+        for k, v in odds_map.items():
+            parts = k.split('_')
+            if len(parts) == 2:
+                if (h_k in parts[0] or parts[0] in h_k) and (a_k in parts[1] or parts[1] in a_k):
+                    entry = v
+                    break
+    if entry is None:
+        return None
+    return entry
 
 def fetch_league_standings(league_code: str, league_data: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, float]]:
     conf = LEAGUE_CONFIG[league_code]
@@ -650,14 +726,34 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
         t_str = f['time']
         title = f"{h_name} - {a_name}"
 
-        # Match live odds
-        odds = find_matched_odds(h_name, a_name, live_odds_by_league.get(lcode, {}))
-        if not odds:
+        # Match live consensus odds + fetch best available ADM bookmaker odds
+        odds_entry = find_matched_odds(h_name, a_name, live_odds_by_league.get(lcode, {}))
+        if not odds_entry:
             skipped_no_odds += 1
             continue
 
-        q1, qx, q2 = odds
-        print(f"[{idx:02d}/{len(target_fixtures)}] {lcode} | {title} (Odds: {q1:.2f} - {qx:.2f} - {q2:.2f})")
+        if isinstance(odds_entry, tuple):
+            avg_q1, avg_qx, avg_q2 = odds_entry
+            match_href = ""
+        else:
+            avg_q1, avg_qx, avg_q2 = odds_entry["avg"]
+            match_href = odds_entry.get("href", "")
+        best_info = fetch_betexplorer_best_odds(match_href)
+        if best_info:
+            q1, qx, q2 = best_info["best"]
+            best_books = best_info["books"]
+            b1_lbl = "/".join(best_books["1"][:2])
+            bx_lbl = "/".join(best_books["X"][:2])
+            b2_lbl = "/".join(best_books["2"][:2])
+            print(
+                f"[{idx:02d}/{len(target_fixtures)}] {lcode} | {title} "
+                f"(Avg: {avg_q1:.2f}-{avg_qx:.2f}-{avg_q2:.2f} | "
+                f"Best ADM: {q1:.2f}[{b1_lbl}] - {qx:.2f}[{bx_lbl}] - {q2:.2f}[{b2_lbl}])"
+            )
+        else:
+            q1, qx, q2 = avg_q1, avg_qx, avg_q2
+            best_books = {"1": ["Media"], "X": ["Media"], "2": ["Media"]}
+            print(f"[{idx:02d}/{len(target_fixtures)}] {lcode} | {title} (Odds Avg fallback: {q1:.2f} - {qx:.2f} - {q2:.2f})")
 
         # Download match details (refresh upcoming cache if older than 6h so teamForm stays fresh)
         cache_f = os.path.join(CACHE_DIR, f"{mid}.json")
@@ -717,16 +813,17 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
         if not scaling["is_sane"]:
             print(f"  [SCALING WARNING] {title}: min={scaling['min_scaled']:.2f}, max={scaling['max_scaled']:.2f}")
 
-        # Run Prediction with Shin Bayesian Shrinkage
-        pred = predici_partita(features, market_odds=[q1, qx, q2], devig_method="shin")
+        # Run Prediction with Shin Bayesian Shrinkage anchored to consensus average odds
+        pred = predici_partita(features, market_odds=[avg_q1, avg_qx, avg_q2], devig_method="shin")
         calib_probs = pred["Bayesian_Shrinkage_1X2"]["Probabilita_%"]
         p1 = calib_probs["1"] / 100.0
         px = calib_probs["X"] / 100.0
         p2 = calib_probs["2"] / 100.0
         shin_z = pred["Bayesian_Shrinkage_1X2"].get("Shin_Z", 0.0)
 
-        # Track 1: 1X2 Screening
+        # Track 1: 1X2 Screening using BEST available ADM bookmaker odds (line-shopping)
         odds_map = {"1": q1, "X": qx, "2": q2}
+        avg_odds_map = {"1": avg_q1, "X": avg_qx, "2": avg_q2}
         probs_map = {"1": p1, "X": px, "2": p2}
         for sel in ["1", "X", "2"]:
             odd = odds_map[sel]
@@ -741,19 +838,25 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False) -> Dict[str, An
                 max_cap=0.030
             )
             if dec["actionable"]:
+                books_str = ", ".join(best_books.get(sel, []))
                 qualified_1x2_bets.append({
                     "date": t_str[:10],
                     "league": lcode,
                     "match": title,
                     "selection": sel,
                     "bookmaker_odds": odd,
+                    "avg_odds": avg_odds_map[sel],
+                    "best_bookmakers": books_str,
                     "fair_odds": dec["fair_odds"],
                     "model_prob": dec["prob_perc"],
                     "ev_perc": dec["ev_perc"],
                     "stake_eur": dec["stake_eur"],
                     "applied_fraction": dec["applied_fraction_perc"]
                 })
-                print(f"  >>> [VALUE 1X2] {sel} @ {odd:.2f} | EV: +{dec['ev_perc']:.2f}% | Stake: EUR {dec['stake_eur']:.2f}")
+                print(
+                    f"  >>> [VALUE 1X2] {sel} @ {odd:.2f} [{books_str}] (Media: {avg_odds_map[sel]:.2f}) "
+                    f"| EV: +{dec['ev_perc']:.2f}% | Stake: EUR {dec['stake_eur']:.2f}"
+                )
 
         # Track 2: Shadow Ghost DNB
         q_dnb_1 = round(max(q1 * (1.0 - 1.0 / qx), q1 * (1.0 - 1.0 / qx) * 1.02), 2)
