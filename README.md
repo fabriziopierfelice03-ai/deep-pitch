@@ -1,6 +1,18 @@
-# DeepPitch v2: Quantitative Football Pricing, Residual-Offset Ensembling & Real-Time Microstructure Engine
+<div align="center">
 
-DeepPitch is an end-to-end quantitative modeling, pricing, and execution pipeline for Top-5 European football (`E0`, `I1`, `SP1`, `D1`, `F1`), built on strictly zero-leakage statistical inference, live availability/lineup shock modeling, multi-bookmaker best-odds execution, and a coupled C++20 in-play hedging daemon.
+# DeepPitch v2
+
+### Quantitative Football Pricing, Residual-Offset Ensembling & Model-Based Bellman RL Dynamic Hedging
+
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![C++20 Engine](https://img.shields.io/badge/Live%20Sentinel-C%2B%2B20-00599C?style=flat-square&logo=cplusplus&logoColor=white)](#autonomous-in-play-risk-sentinel-c20-bellman-rl-engine)
+[![Blind Brier 2024/25](https://img.shields.io/badge/Blind%2024%2F25%20Brier-0.57365-2ea043?style=flat-square)](#1-probabilistic-accuracy-brier-score--strictly-zero-current-match-odds-leakage)
+[![OOS Sample](https://img.shields.io/badge/OOS%20Evaluation-9%2C768%20Matches-58a6ff?style=flat-square)](#out-of-sample-quantitative-benchmarks)
+[![Tests](https://img.shields.io/badge/Pytest%20%2B%20C%2B%2B20%20Tests-20%2F20%20Passing-2ea043?style=flat-square)](#3-run-the-full-test-suite)
+
+*Zero-leakage statistical inference & line shopping across Europe's Top-5 football leagues (`E0`, `I1`, `SP1`, `D1`, `F1`), coupled with a private 1Hz C++20 Model-Based Reinforcement Learning execution daemon.*
+
+</div>
 
 ---
 
@@ -46,7 +58,9 @@ DeepPitch **v2** replaces the legacy single-MLP architecture (`v1`, blind test B
             • Auto-Audit & CLV Tracking (data/v2_scan_audit.csv + tracking_2026_2027.csv)
                                │
                                ▼
-            [ Autonomous C++20 Live Risk Sentinel (Private Execution Engine) ]
+        [ Autonomous C++20 Live Sentinel — Model-Based Bellman RL (Private Daemon) ]
+        • 1Hz Backward Induction (t = 94' -> t_now) maximizing CRRA Dynamic Kelly (γ = 4.0)
+        • Multi-Step Actions: {HOLD, FREEBET, PARTIAL_HEDGE_50, FULL_GREENBOOK, FREEZE}
 ```
 
 ---
@@ -75,6 +89,14 @@ Evaluated on the exact **16,268 Top-5 historical dataset** (`2015–2025`) using
 * **Ligue 1 (`F1`, n=302):** `0.56749` vs `0.56401` (`+0.00348`)
 * **Regular Season (`Matchdays 1–30`, n=1,241):** `0.57447` vs `0.57239` (**`+0.00208`**)
 
+<p align="center">
+  <img src="docs/charts/01_brier_ablation.png" alt="DeepPitch v2 Out-of-Sample Brier Progression" width="94%" />
+</p>
+
+<p align="center">
+  <img src="docs/charts/02_calibration_reliability.png" alt="DeepPitch v2 6-Season OOS Reliability Curves" width="98%" />
+</p>
+
 ### 2. Live Blind Validation on `2026/27` (`Aug–Nov 2026`) — Impact of Fresh Injuries & Lineups
 
 Tested strictly out-of-sample on `136` completed `2026/27` Top-5 matches with prior FotMob lineup histories cached in `data/scanner_cache/` and live `football-data.co.uk` `2627` odds:
@@ -101,6 +123,10 @@ Why **`EV ∈ [1.0%, 8.0%)`**? Empirical diagnostics across 9,768 OOS matches re
 | **Post-COVID 4 Seasons (`2021–2025`)** | **3,249** | **37.1%** | **`+143.14u`** | **`+4.41%`** | **`+0.62%`** |
 
 *(On World Max best-odds across all 6 seasons `2019–2025`: `5,084` bets, **`+123.36u (+2.43%)`**, **`CLV = +2.90%`**, Quarter-Kelly `€1,000 → €1,781`; Post-COVID `2021–2025`: **`+3.05%`**, Quarter-Kelly **`€2,181`**.)*
+
+<p align="center">
+  <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
+</p>
 
 ---
 
@@ -140,12 +166,28 @@ Long-term absences are already priced into past market lines. `src/injury_lineup
 
 ---
 
-## Autonomous In-Play Risk Sentinel (C++20 Engine)
+## Autonomous In-Play Risk Sentinel (C++20 Bellman RL Engine)
 
-While DeepPitch v2 handles pre-match pricing and selection, open positions are monitored in real time by **Live Sentinel**, a decoupled private **C++20** daemon (`live-sentinel`) ingesting 1Hz live odds feeds:
-* **Mathematical Green Book Hedging:** Locks risk-free profit $S_{\text{hedge}} = \text{round}_{0.50}\!\left(\frac{S_0 \cdot O_0}{O_{\text{opp}}(t)}\right)$ protected by an analytical Red Book break-even guard $O_{\text{opp}}(t) > \frac{O_0}{O_0 - 1}$.
-* **Two-Level Microstructure State Machine:** Continuous economic activation gate $A(t) \ge 0.50$ paired with Track A (extreme asymmetry bypass) and Track B (4-minute rolling velocity, pressure stasis trigger, and anti-panic circuit breaker).
-* **Atomic Sync:** Synchronizes settled hedges to `tracking_2026_2027.csv` and dispatches sub-second Telegram execution receipts.
+While DeepPitch v2 handles pre-match pricing and selection, open positions are managed in real time by **Live Sentinel**, a decoupled private **C++20** daemon (`live-sentinel`) running at **1Hz** on a Linux VPS (~1.5 MB RAM, ~0.25 ms/tick):
+
+* **Model-Based Multi-Step Reinforcement Learning (Bellman Backward Induction):** Solves the exact finite-horizon Bellman equation backward from $t = 94' \to t_{\text{now}}$ over an empirical non-homogeneous Poisson goal-intensity world model calibrated on **21,605 real Top-5 Opta matches (2014–2026)**, coupled with a real-time **Pressure Index (`PI`)** regime Markov chain, live odds velocity $V$, ClubElo differential, and Martingale-consistent no-arbitrage future bookmaker pricing.
+* **CRRA Dynamic Fractional Kelly Objective ($\gamma = 4.0$):** Maximizes bankroll-normalized CRRA Certainty Equivalent utility (using full 15-digit IEEE-754 `log1p`/`expm1` precision, automatically synced to live bankroll from `tracking_2026_2027.csv`), choosing dynamically among `{HOLD, FREEBET, PARTIAL_HEDGE_50, FULL_GREENBOOK, FREEZE}` with cumulative multi-step leg accounting (`CumulativeHedgeBook`).
+* **Universal Live Tick Recorder:** Logs every live Kambi football match to daily CSV snapshots (`data/live_ticks/`) for future Offline RL calibration on real in-play spreads.
+* **Atomic Sync:** Synchronizes settled multi-step hedges to `tracking_2026_2027.csv`, commits audit logs, and dispatches Telegram execution receipts.
+
+**Out-of-Sample In-Play Benchmark (`5,253` real Top-5 Opta matches 2023–2026; `2,663` leading episodes, `7.5%` asymmetric live vig):**
+
+| Scenario & Policy | Net PnL (€) | StdDev (€) | CRRA CE ($\gamma=4$) | Max DD | Comebacks Saved |
+| :--- | ---: | ---: | ---: | :---: | :---: |
+| **A. Realistic Kambi** *(7.5% vig, 2m lag, 2% @ 2.65)* — Pure Hold | 47,811 | 23.90 | 44,710 | 11.4% | 0 / 756 |
+| A. Legacy Microstructure (All-or-Nothing) | 48,051 | 23.31 | 45,099 | 11.0% | 37 / 756 |
+| **A. Bellman Multi-Step RL ($\gamma = 4.0$)** | **49,137** | **18.69** | **47,242** | **7.8%** | **352 / 756** |
+| **B. Zero-Edge Stress Test** *(7.5% vig, 0m lag)* — Legacy vs **Bellman RL** | 47,712 vs **47,839** | 22.59 vs **21.19** | 44,940 vs **45,400** | 11.0% vs **11.0%** | 78 vs **173 / 756** |
+| **C. High-Odds Underdog** *(3.50 odds, 7.0% vig)* — Hold vs **Bellman RL** | 140,402 vs **138,890** | 55.23 vs **24.73** | 123,648 vs **135,657** | 19.2% vs **3.5%** | 0 vs **727 / 756** |
+
+<p align="center">
+  <img src="docs/charts/04_bellman_rl_live_hedging.png" alt="Live Sentinel C++20 Bellman Multi-Step RL Benchmark" width="98%" />
+</p>
 
 ---
 
