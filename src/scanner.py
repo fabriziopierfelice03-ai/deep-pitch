@@ -231,7 +231,7 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
     if eng_tag == "V2":
         eng_display = "V2.1"
         ev_rule = "EV ∈ [2.5%, 6.0%)"
-        kelly_label = "1/8-Kelly"
+        kelly_label = "Quarter-Kelly"
     else:
         eng_display = eng_tag
         ev_rule = "EV ≥ +5.0%"
@@ -921,8 +921,8 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
             max_ev_thr = 0.060
             min_odds_thr = 1.35
             max_odds_thr = 6.00
-            kelly_frac_thr = 0.125
-            max_cap_thr = 0.020
+            kelly_frac_thr = 0.250
+            max_cap_thr = 0.030
         else:
             features = build_56_features(
                 home_elo=h_elo,

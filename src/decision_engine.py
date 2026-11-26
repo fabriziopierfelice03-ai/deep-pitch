@@ -20,7 +20,7 @@ def calculate_quarter_kelly(
 ) -> Dict[str, Any]:
     """
     Calcola l'Expected Value e il dimensionamento dello stake con Fractional Kelly
-    (default 0.25 = Quarter-Kelly; in DeepPitch v2.1: 0.125 = Eighth-Kelly, cap 2.0%).
+    (default 0.25 = Quarter-Kelly, Hard Cap 3.0% del bankroll).
 
     Parametri:
     - prob: probabilità stimata dal modello / calibrazione (compresa tra 0.0 e 1.0)
@@ -29,9 +29,9 @@ def calculate_quarter_kelly(
     - min_ev: soglia minima di valore atteso (default 5.0% = 0.050; in v2.1 2.5%)
     - min_odds: quota minima ammissibile (default 1.60; in v2.1 1.35)
     - max_odds: quota massima ammissibile (default 3.10; in v2.1 6.00)
-    - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 3.0%; in v2.1 2.0%)
+    - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 3.0%)
     - max_ev: soglia massima di valore atteso ammissibile (default 100.0%; in v2.1 6.0% anti-adverse-selection)
-    - kelly_fraction: moltiplicatore frazionale di Kelly (default 0.25; in v2.1 0.125)
+    - kelly_fraction: moltiplicatore frazionale di Kelly (default 0.25 = Quarter-Kelly)
     """
     if bookmaker_odds <= 1.0 or prob <= 0.0 or prob > 1.0:
         return {

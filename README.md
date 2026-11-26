@@ -55,8 +55,8 @@ DeepPitch **v2.1** replaces the legacy single-MLP architecture (`v1`, blind test
              • Bounded Logit Adjustment (±0.16) + Adverse-Selection Trap Guard
                                 │
                                 ▼
-             [ 11-Book ADM Best-Odds Line Shopping + 1/8-Kelly Sizing ]
-             • Band: EV ∈ [2.5%, 6.0%) | Odds ∈ (1.35, 6.00) | Hard Cap: 2.0%
+             [ 11-Book ADM Best-Odds Line Shopping + Quarter-Kelly Sizing ]
+             • Band: EV ∈ [2.5%, 6.0%) | Odds ∈ (1.35, 6.00) | Hard Cap: 3.0%
              • Auto-Audit & CLV Tracking (data/v2_scan_audit.csv + tracking_2026_2027.csv)
                                 │
                                 ▼
@@ -167,8 +167,8 @@ Long-term absences are already priced into past market lines. `src/injury_lineup
 ### 5. Shin (1993) De-Vigging, 11-Book ADM Line Shopping & Fractional Kelly Sizing
 * **Shin De-Vigging:** Accounts for favorite-longshot bias by solving numerically for the informed-trading parameter $z \in [0, 1)$ such that $\sum_c p_c(z) = 1$.
 * **ADM Best-Odds Execution:** Queries BetExplorer's live AJAX bookmaker feed across 11 active Italian ADM bookmakers (`888sport`, `bet365`, `bwin.it`, `Eurobet.it`, `GoldBet`, `Lottomatica`, `Netwin`, `Planetwin365`, `Sisal`, `SNAI`, `William Hill`), cutting effective execution overround from `~6.5%` average down to `~3.6–4.4%`.
-* **1/8-Kelly Capital Allocation (`v2.1`, `EV ∈ [2.5%, 6.0%)`):**
-  $$f^* = \frac{p \cdot q - 1}{q - 1}, \qquad \text{Stake Fraction} = \min\!\left(0.125 \cdot f^*, \; 0.020\right)$$
+* **Quarter-Kelly Capital Allocation (`v2.1`, `EV ∈ [2.5%, 6.0%)`):**
+  $$f^* = \frac{p \cdot q - 1}{q - 1}, \qquad \text{Stake Fraction} = \min\!\left(0.25 \cdot f^*, \; 0.030\right)$$
 
 ---
 
