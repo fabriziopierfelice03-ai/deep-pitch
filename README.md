@@ -96,11 +96,11 @@ Evaluated on the exact **16,268 Top-5 historical dataset** (`2015–2025`) using
 * **All 6 Seasons OOS (`9,768` matches `2019–2025`):** `v2.1` improves over `v2.0` by `-0.00045` Brier (`z = -2.11`, `p = 0.035`), nearly doubling realized CLV vs Pinnacle Close (`+0.30% → +0.61%` on `MaxOdds`, `EV ∈ [2.5%, 6.0%)`: `+3.47%` ROI, `€1,000 → €2,214`).
 
 <p align="center">
-  <img src="docs/charts/01_brier_ablation.png" alt="DeepPitch v2 Out-of-Sample Brier Progression" width="94%" />
+  <img src="docs/charts/01_brier_ablation.png" alt="DeepPitch v2.1 Out-of-Sample Brier Progression" width="94%" />
 </p>
 
 <p align="center">
-  <img src="docs/charts/02_calibration_reliability.png" alt="DeepPitch v2 6-Season OOS Reliability Curves" width="98%" />
+  <img src="docs/charts/02_calibration_reliability.png" alt="DeepPitch v2.1 6-Season OOS Reliability Curves" width="98%" />
 </p>
 
 ### 2. Live Blind Validation on `2026/27` (`Aug–Nov 2026`) — Impact of Fresh Injuries & Lineups
@@ -131,7 +131,7 @@ Why **`EV ∈ [2.5%, 6.0%)`**? Empirical diagnostics across `9,768` OOS matches 
 *(Max Drawdown over all 6 seasons compounded: `34.1%`; on the Blind `2024/25` season: `16.7%`. Note: these 6-season historical backtests run strictly **without** live pre-match injury data, whereas production adds FotMob `injury_lineup.py` fresh-starter adjustments & trap blocking.)*
 
 <p align="center">
-  <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
+  <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2.1 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
 </p>
 
 ---
@@ -139,7 +139,7 @@ Why **`EV ∈ [2.5%, 6.0%)`**? Empirical diagnostics across `9,768` OOS matches 
 ## Mathematical & Statistical Methodology
 
 ### 1. Exact Rolling Weighted Poisson-MLE Dixon-Coles (`npxG` & `xGOT`)
-Raw rolling averages fail to adjust for opponent strength and suffer from penalty variance (`~0.77 xG` noise per penalty). DeepPitch v2 solves a time-decayed Ridge-regularized Poisson MLE via **Newton-Raphson (IRLS)** strictly on past matches ($t_k < t$, half-life $\tau = 120$ days):
+Raw rolling averages fail to adjust for opponent strength and suffer from penalty variance (`~0.77 xG` noise per penalty). DeepPitch v2.1 solves a time-decayed Ridge-regularized Poisson MLE via **Newton-Raphson (IRLS)** strictly on past matches ($t_k < t$, half-life $\tau = 120$ days):
 
 $$\lambda_H = \exp\!\left(\mu + \tfrac{1}{2}\text{HFA} + a_H - d_A\right), \qquad \lambda_A = \exp\!\left(\mu - \tfrac{1}{2}\text{HFA} + a_A - d_H\right)$$
 
@@ -174,7 +174,7 @@ Long-term absences are already priced into past market lines. `src/injury_lineup
 
 ## Autonomous In-Play Risk Sentinel (C++20 Bellman RL Engine)
 
-While DeepPitch v2 handles pre-match pricing and selection, open positions are managed in real time by **Live Sentinel**, a decoupled private **C++20** daemon (`live-sentinel`) running at **1Hz** on a Linux VPS (~1.5 MB RAM, ~0.25 ms/tick):
+While DeepPitch v2.1 handles pre-match pricing and selection, open positions are managed in real time by **Live Sentinel**, a decoupled private **C++20** daemon (`live-sentinel`) running at **1Hz** on a Linux VPS (~1.5 MB RAM, ~0.25 ms/tick):
 
 * **Model-Based Multi-Step Reinforcement Learning (Bellman Backward Induction):** Solves the exact finite-horizon Bellman equation backward from $t = 94' \to t_{\text{now}}$ over an empirical non-homogeneous Poisson goal-intensity world model calibrated on **21,605 real Top-5 Opta matches (2014–2026)**, coupled with a real-time **Pressure Index (`PI`)** regime Markov chain, live odds velocity $V$, ClubElo differential, and Martingale-consistent no-arbitrage future bookmaker pricing.
 * **CRRA Dynamic Fractional Kelly Objective ($\gamma = 4.0$):** Maximizes bankroll-normalized CRRA Certainty Equivalent utility (using full 15-digit IEEE-754 `log1p`/`expm1` precision, automatically synced to live bankroll from `tracking_2026_2027.csv`), choosing dynamically among `{HOLD, FREEBET, PARTIAL_HEDGE_50, FULL_GREENBOOK, FREEZE}` with cumulative multi-step leg accounting (`CumulativeHedgeBook`).
@@ -201,19 +201,19 @@ While DeepPitch v2 handles pre-match pricing and selection, open positions are m
 
 ```text
 ├── src/
-│   ├── train_v2.py             # DeepPitch v2 training & 5-fold expanding OOF calibration -> bundle export
-│   ├── v2_state_engine.py      # Live auto-sync football-data + FotMob npxG/xGOT + exact rolling solvers
+│   ├── train_v2.py             # DeepPitch v2.1 training & 5-fold expanding OOF calibration -> bundle export
+│   ├── v2_state_engine.py      # Live auto-sync football-data + FotMob npxG + Adaptive Riccati Dual-Gain Kalman
 │   ├── injury_lineup.py        # Live FotMob fresh-injury, suspension, rotation delta & trap guard
-│   ├── predict_v2.py           # 5-Head Residual-Offset v2 inference engine
-│   ├── scanner.py              # Unified pre-match Top-5 scanner (v2 default, 11-book ADM best-odds, Telegram, CLV audit)
-│   ├── decision_engine.py      # EV band [1%, 8%) qualification & Quarter-Kelly sizing (3% cap)
+│   ├── predict_v2.py           # 5-Head Residual-Offset v2.1 inference engine
+│   ├── scanner.py              # Unified pre-match Top-5 scanner (v2.1 default, 11-book ADM best-odds, Telegram, CLV audit)
+│   ├── decision_engine.py      # EV band [2.5%, 6.0%) qualification & Quarter-Kelly sizing (3% cap)
 │   ├── elo_fetcher.py          # Live ClubElo scraper with 12h local cache
 │   ├── settle_matches.py       # Automated match settlement & bankroll ledger updater
 │   ├── feature_builder.py      # Legacy v1 56-feature deterministic builder
 │   ├── predict.py              # Legacy v1 inference + Shin (1993) de-vigging utility
 │   └── train_and_export.py     # Legacy v1 PyTorch training script
 ├── models/
-│   ├── deep_pitch_v2_bundle.pkl # Production DeepPitch v2 serialized 5-head ensemble & scalers
+│   ├── deep_pitch_v2_bundle.pkl # Production DeepPitch v2.1 serialized 5-head ensemble & scalers
 │   └── modello_calcio_v1.pt     # Legacy v1 checkpoint
 ├── backtest/
 │   ├── backtest.cpp            # Native C++20 backtester & 10,000-run dual Monte Carlo stress tester
@@ -237,7 +237,7 @@ While DeepPitch v2 handles pre-match pricing and selection, open positions are m
 pip install -r requirements.txt
 ```
 
-### 2. Run the Pre-Match Top-5 Scanner (DeepPitch v2)
+### 2. Run the Pre-Match Top-5 Scanner (DeepPitch v2.1)
 ```bash
 # Dry-run scan across E0, I1, SP1, D1, F1 (v2 engine + live injuries + 11-book ADM best-odds)
 python src/scanner.py
