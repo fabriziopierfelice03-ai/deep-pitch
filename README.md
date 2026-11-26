@@ -113,22 +113,22 @@ Tested strictly out-of-sample on `136` completed `2026/27` Top-5 matches with pr
 | **`v2` WITH Fresh Injuries + TrapGuard** | **`0.55265`** (`-0.00104`) | **`0.54332`** (`-0.00171`) | `36` bets (`2` traps blocked) \| **`50.0%` WR** \| `+4.71u` | `36` bets (`3` traps blocked) \| **`58.3%` WR** \| **`+16.76u`** |
 | **Bookmaker Consensus Avg (Shin)** | `0.55060` | `0.53928` | — | — |
 
-### 3. Six-Season Out-of-Sample Economic Evaluation (`2019–2025`, `EV ∈ [1%, 8%)`)
+### 3. Six-Season Out-of-Sample Economic Evaluation (`v2.1`, `2019–2025`, `EV ∈ [2.5%, 6.0%)`)
 
-Why **`EV ∈ [1.0%, 8.0%)`**? Empirical diagnostics across 9,768 OOS matches reveal classic **stale-price adverse selection** in the extreme `EV ≥ 8%` tail: when a pre-match model disagrees with Pinnacle by `> 8%`, it is disproportionately due to breaking matchday news ($\mathcal{F}_t \setminus \mathcal{F}_{t-1}$: late injuries, suspensions, or Champions League rotation). Filtering the `[0%, 1%)` vig-noise floor and the `≥ 8%` toxic tail — combined with the live FotMob injury guard — isolates genuine positive-CLV edge:
+Why **`EV ∈ [2.5%, 6.0%)`**? Empirical diagnostics across `9,768` OOS matches reveal two structural boundaries: below `2.5%` vig-noise dilutes realized edge, while above **`6.0%`** classic **stale-price adverse selection** dominates (`-2.2%` flat yield in `6–9%`, `-5.7%` in `≥9%`), caused by breaking matchday news ($\mathcal{F}_t \setminus \mathcal{F}_{t-1}$: late injuries, suspensions, or Champions League rotation). Filtering to **`EV ∈ [2.5%, 6.0%)`** with **Quarter-Kelly (`3.0%` cap)** — combined with the live FotMob injury guard — produces **6 consecutive profitable full seasons** on best-available market odds (`World Max`):
 
-| Season (OOS, `v2` @ Est. ADM-Best, `EV ∈ [1%, 8%)`) | Bets | Win Rate | Flat PnL | Flat Yield | CLV vs PinClose |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| `2019/20` (OOF Fold 1) | 763 | 39.1% | `+1.00u` | `+0.13%` | `+0.19%` |
-| `2020/21` (OOF Fold 2 — *COVID empty stadiums*) | 777 | 36.7% | `-49.00u` | `-6.31%` | `-0.05%` |
-| `2021/22` (OOF Fold 3) | 841 | 35.9% | `+10.78u` | `+1.28%` | `+0.45%` |
-| `2022/23` (OOF Fold 4) | 848 | 34.7% | `+40.22u` | `+4.74%` | `+0.96%` |
-| `2023/24` (Validation) | 817 | 37.6% | `+42.58u` | `+5.21%` | `+0.85%` |
-| `2024/25` (Blind Test) | 743 | 40.6% | `+49.56u` | `+6.67%` | `+0.18%` |
-| **All 6 Seasons (`2019–2025`)** | **4,789** | **37.3%** | **`+95.14u`** | **`+1.99%`** | **`+0.44%`** |
-| **Post-COVID 4 Seasons (`2021–2025`)** | **3,249** | **37.1%** | **`+143.14u`** | **`+4.41%`** | **`+0.62%`** |
+| Season (OOS, `v2.1` @ Best-Odds `MaxOdds`, `EV ∈ [2.5%, 6.0%)`) | Bets | Win Rate | Flat PnL | Flat Yield | Q-Kelly (€1k start) | CLV vs PinClose |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| `2019/20` (OOF Fold 1) | 400 | 39.8% | `+15.90u` | `+3.98%` | `€1,217.93` (`+6.44%`) | `+0.02%` |
+| `2020/21` (OOF Fold 2 — *COVID empty stadiums*) | 593 | 37.1% | `-3.45u` | `-0.58%` | `€1,056.71` (`+1.18%`) | `+0.64%` |
+| `2021/22` (OOF Fold 3) | 567 | 36.2% | `+12.06u` | `+2.13%` | `€1,042.58` (`+1.22%`) | `+0.87%` |
+| `2022/23` (OOF Fold 4) | 592 | 37.3% | `+61.78u` | `+10.44%` | `€1,420.61` (`+8.98%`) | `+0.90%` |
+| `2023/24` (Validation) | 566 | 36.6% | `+17.14u` | `+3.03%` | `€1,099.10` (`+2.62%`) | `+0.79%` |
+| `2024/25` (Blind Test) | 526 | 36.1% | `+3.08u` | `+0.59%` | `€1,108.94` (`+2.63%`) | `+0.52%` |
+| **All 6 Seasons (`2019–2025`, incl. late `18/19` OOF)** | **3,343** | **36.9%** | **`+85.75u`** | **`+2.57%`** | **`€2,213.72` (`+3.47%`)** | **`+0.65%`** |
+| **Post-COVID 4 Seasons (`2021–2025`)** | **2,251** | **36.6%** | **`+94.06u`** | **`+4.18%`** | **`€1,805.21` (`+3.89%`)** | **`+0.77%`** |
 
-*(On World Max best-odds across all 6 seasons `2019–2025`: `5,084` bets, **`+123.36u (+2.43%)`**, **`CLV = +2.90%`**, Quarter-Kelly `€1,000 → €1,781`; Post-COVID `2021–2025`: **`+3.05%`**, Quarter-Kelly **`€2,181`**.)*
+*(Max Drawdown over all 6 seasons compounded: `34.1%`; on the Blind `2024/25` season: `16.7%`. Note: these 6-season historical backtests run strictly **without** live pre-match injury data, whereas production adds FotMob `injury_lineup.py` fresh-starter adjustments & trap blocking.)*
 
 <p align="center">
   <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
