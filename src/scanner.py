@@ -228,10 +228,17 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
     
     eng_tag = str(scan_summary.get('engine', 'v2')).upper()
-    ev_rule = "EV ∈ [1.0%, 8.0%)" if eng_tag == "V2" else "EV ≥ +5.0%"
+    if eng_tag == "V2":
+        eng_display = "V2.1"
+        ev_rule = "EV ∈ [2.5%, 6.0%)"
+        kelly_label = "1/8-Kelly"
+    else:
+        eng_display = eng_tag
+        ev_rule = "EV ≥ +5.0%"
+        kelly_label = "Quarter-Kelly"
     if not new_bets:
         msg = (
-            f"🎯 *DEEP PITCH {eng_tag} | SCANSIONE PRE-MATCH COMPLETATA*\n"
+            f"🎯 *DEEP PITCH {eng_display} | SCANSIONE PRE-MATCH COMPLETATA*\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📅 Scansione: *{now_str}*\n"
             f"💰 Bankroll Attivo: *€{bankroll:.2f}*\n"
@@ -243,7 +250,7 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
         )
     else:
         msg_lines = [
-            f"🎯 *DEEP PITCH {eng_tag} | NUOVE VALUE BET IDENTIFICATE*",
+            f"🎯 *DEEP PITCH {eng_display} | NUOVE VALUE BET IDENTIFICATE*",
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             f"📅 Scansione: *{now_str}*",
             f"💰 Bankroll Attivo: *€{bankroll:.2f}*",
@@ -260,7 +267,7 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
                 f"• Lega: *{b['league']}* | Data: *{b['date_csv']}*",
                 f"• Segno: *{b['selection']}* @ *{b['bookmaker_odds']:.2f}*{book_tag} (Fair: {b['fair_odds']:.2f})",
                 f"• Prob. Modello: *{b['model_prob']:.1f}%* | EV: *+{b['ev_perc']:.2f}%*{inj_tag}",
-                f"• Stake Quarter-Kelly: *€{b['stake_eur']:.2f}* ({b['applied_fraction']:.2f}%)\n"
+                f"• Stake {kelly_label}: *€{b['stake_eur']:.2f}* ({b['applied_fraction']:.2f}%)\n"
             ])
             
         msg_lines.extend([
@@ -910,10 +917,12 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
             p1, px, p2 = pred_v2["Final_1X2"]["Probs_Float"]
             raw_v2_p = pred_v2["V2_Raw_1X2"]["Probabilita_%"]
             shin_mkt_p = pred_v2.get("Market_Reference", {}).get("De_Vigged_Market_%", {"1": 0, "X": 0, "2": 0})
-            min_ev_thr = 0.010
-            max_ev_thr = 0.080
+            min_ev_thr = 0.025
+            max_ev_thr = 0.060
             min_odds_thr = 1.35
             max_odds_thr = 6.00
+            kelly_frac_thr = 0.125
+            max_cap_thr = 0.020
         else:
             features = build_56_features(
                 home_elo=h_elo,
@@ -942,6 +951,8 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
             max_ev_thr = 1.000
             min_odds_thr = 1.60
             max_odds_thr = 3.10
+            kelly_frac_thr = 0.250
+            max_cap_thr = 0.030
 
         # Track 1: 1X2 Screening using BEST available ADM bookmaker odds (line-shopping)
         odds_map = {"1": q1, "X": qx, "2": q2}
@@ -962,8 +973,9 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
                 min_ev=min_ev_thr,
                 min_odds=min_odds_thr,
                 max_odds=max_odds_thr,
-                max_cap=0.030,
+                max_cap=max_cap_thr,
                 max_ev=max_ev_thr,
+                kelly_fraction=kelly_frac_thr,
             )
             if dec["actionable"]:
                 if engine == "v2":

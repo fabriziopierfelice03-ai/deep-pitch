@@ -1,19 +1,26 @@
 """
 src/train_v2.py
-Trains and exports the production Deep-Pitch v2 Residual-Offset 5-Head Ensemble:
-  - Base: Zero-leakage Generative Blend (Online Past-Market + Exact Rolling 35d Past-Market + Exact Rolling 120d Opta npxG DC)
+Trains and exports the production Deep-Pitch v2.1 Residual-Offset 5-Head Ensemble:
+  - Base: Zero-leakage Generative Blend:
+      * Adaptive Riccati Dual-Gain Kalman (v2.1: Pinnacle prior + 100% Opta npxG reality check, dynamic P_t)
+      * Slow Online Past-Market Kalman
+      * Exact Rolling 35d Past-Market Ridge
+      * Exact Rolling 120d Opta npxG Dixon-Coles
+      * Online Blended DC
   - Head 1: Grouped-Ridge Offset Linear (separate L2 for end-of-season motivation vs general residuals)
   - Head 2: Residual-Offset LightGBM (5-seed soup, init_score = log(p_base))
   - Head 3: Residual-Offset XGBoost (5-seed soup, base_margin = log(p_base))
-  - Head 4: Residual-Offset PyTorch MLP (12-seed Model Soup)
-  - Calibration: 5-Fold Expanding Temporal OOF CV (8,140 matches) -> Simplex Blend + Temperature Scaling
+  - Head 4: Residual-Offset PyTorch MLP (10-seed Model Soup)
+  - Calibration: 5-Fold Expanding Temporal OOF CV (8,141 matches) -> Simplex Blend + Temperature Scaling
 
 Final production weights are fitted on ALL 16,268 verified Top-5 matches (2015-2025)
-after verifying exact blind Test (2024/25) Brier score, and saved to models/deep_pitch_v2_bundle.pkl.
+after verifying exact blind Test (2024/25) Brier & Log-Loss, and saved to models/deep_pitch_v2_bundle.pkl.
 """
 
 import os
 import sys
+import math
+import glob
 import pickle
 import warnings
 import numpy as np
@@ -29,12 +36,15 @@ import torch.nn.functional as F
 warnings.filterwarnings("ignore")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
 OUT_BUNDLE = os.path.join(MODELS_DIR, "deep_pitch_v2_bundle.pkl")
 
-# Default source paths built in scratch during v2 R&D
-DEFAULT_EXACT_PKL = r"C:\Users\fabri\.gemini\antigravity\brain\bea11f98-a77d-4dd8-aae2-6e29a5c09a40\scratch\deep_pitch_v2_exact.pkl"
+# Default source paths built in scratch during v2/v2.1 R&D
+SCRATCH_DIR = r"C:\Users\fabri\.gemini\antigravity\brain\bea11f98-a77d-4dd8-aae2-6e29a5c09a40\scratch"
+DEFAULT_EXACT_PKL = os.path.join(SCRATCH_DIR, "deep_pitch_v2_exact.pkl")
 DEFAULT_MATCHES_CSV = r"c:\Users\fabri\Desktop\backtest\Matches.csv"
 DEFAULT_ENRICHED_CSV = r"c:\Users\fabri\Desktop\backtest\matches_enriched_xg_top5_2014_2026.csv"
 TOP5_DIVS = ["E0", "I1", "SP1", "D1", "F1"]
@@ -59,6 +69,204 @@ RES_COLS = [
 
 def brier_score(probs, y_oh):
     return float(np.mean(np.sum((probs - y_oh) ** 2, axis=1)))
+
+
+def log_loss_score(probs, y):
+    p = np.clip(probs, 1e-7, 1.0)
+    return float(-np.mean(np.log(p[np.arange(len(y)), y])))
+
+
+def compute_v21_kalman_d2_t1f(n_bench):
+    """
+    Recomputes the strictly causal (t' < t) v2.1 Adaptive Riccati Dual-Gain Kalman
+    (Pinnacle implied lambda prior + 100% Opta npxG reality check, dynamic P_t)
+    matching src/v2_state_engine.py 1:1.
+    """
+    if SCRATCH_DIR not in sys.path:
+        sys.path.insert(0, SCRATCH_DIR)
+    import build_v2_dataset as bvd
+
+    df_opta = bvd.load_opta_match_stats()
+    df_fd = bvd.load_fd_pinnacle_odds()
+
+    df_m = pd.read_csv(DEFAULT_MATCHES_CSV, low_memory=False)
+    df_m = df_m[df_m["Division"].isin(TOP5_DIVS)].copy()
+    df_m["MatchDate_dt"] = pd.to_datetime(df_m["MatchDate"])
+    df_m = df_m[(df_m["MatchDate_dt"] >= "2013-07-01") & (df_m["MatchDate_dt"] <= "2025-07-01")].copy()
+    df_m = df_m.sort_values(["MatchDate_dt", "Division", "HomeTeam"]).reset_index(drop=True)
+
+    df_enr = pd.read_csv(DEFAULT_ENRICHED_CSV, usecols=["Division", "MatchDate", "HomeTeam", "AwayTeam"])
+    enr_key_to_idx = {}
+    for idx, r in enumerate(df_enr.itertuples(index=False)):
+        enr_key_to_idx[(r.Division, r.MatchDate, r.HomeTeam, r.AwayTeam)] = idx
+
+    df_m["enr_idx"] = [
+        enr_key_to_idx.get((r.Division, r.MatchDate, r.HomeTeam, r.AwayTeam), -1)
+        for r in df_m[["Division", "MatchDate", "HomeTeam", "AwayTeam"]].itertuples(index=False)
+    ]
+
+    opta_cols = ["Division", "MatchDate_dt", "HomeTeam", "AwayTeam", "opta_npxg_h", "opta_npxg_a"]
+    df_opta_dedup = df_opta[opta_cols].drop_duplicates(subset=["Division", "MatchDate_dt", "HomeTeam", "AwayTeam"])
+    df_m = df_m.merge(df_opta_dedup, on=["Division", "MatchDate_dt", "HomeTeam", "AwayTeam"], how="left")
+
+    fd_cols = ["Division", "MatchDate_dt", "HomeTeam", "AwayTeam", "PSH", "PSD", "PSA", "PSCH", "PSCD", "PSCA", "FD_O25", "FD_U25", "FD_AHh"]
+    df_fd_dedup = df_fd[fd_cols].drop_duplicates(subset=["Division", "MatchDate_dt", "HomeTeam", "AwayTeam"])
+    df_m = df_m.merge(df_fd_dedup, on=["Division", "MatchDate_dt", "HomeTeam", "AwayTeam"], how="left")
+
+    R_pin = 1.0
+    Q_match = 0.075
+    Q_summer = 0.50
+    Q_break = 0.10
+    P_new = 1.50
+    field_k_ratio = 0.12
+    decay = 0.005
+
+    league_avg_lam = {d: 1.32 for d in TOP5_DIVS}
+    league_hfa_lam = {d: 0.28 for d in TOP5_DIVS}
+    league_avg_npxg = {d: 1.25 for d in TOP5_DIVS}
+    team_state = {}
+    last_season = {}
+    last_day = {}
+    preds = np.full((n_bench, 3), np.nan, dtype=np.float64)
+
+    def init_st(elo):
+        if not np.isnan(elo):
+            en = (elo - 1650.0) / 200.0
+        else:
+            en = 0.0
+        return {
+            "att": 0.18 * en, "def": 0.18 * en,
+            "att_s": 0.18 * en, "def_s": 0.18 * en,
+            "P_att": P_new, "P_def": P_new,
+        }
+
+    def regress_st(st, elo):
+        if not np.isnan(elo):
+            en = (elo - 1650.0) / 200.0
+        else:
+            en = 0.0
+        for k in ("att", "def", "att_s", "def_s"):
+            st[k] = 0.75 * st[k] + 0.25 * (0.18 * en)
+        st["P_att"] = min(P_new, st["P_att"] + Q_summer)
+        st["P_def"] = min(P_new, st["P_def"] + Q_summer)
+
+    for row in df_m.itertuples(index=False):
+        div = row.Division
+        ht = row.HomeTeam
+        at = row.AwayTeam
+        dt = row.MatchDate_dt
+        day_ord = int(dt.toordinal())
+        if dt.month >= 7:
+            season = f"{dt.year}/{dt.year + 1}"
+        else:
+            season = f"{dt.year - 1}/{dt.year}"
+        h_elo = float(row.HomeElo) if pd.notna(row.HomeElo) else 1650.0
+        a_elo = float(row.AwayElo) if pd.notna(row.AwayElo) else 1650.0
+        e_idx = int(row.enr_idx)
+
+        for team, elo in ((ht, h_elo), (at, a_elo)):
+            if team not in team_state:
+                team_state[team] = init_st(elo)
+                last_season[team] = season
+                last_day[team] = day_ord
+            else:
+                st = team_state[team]
+                if last_season[team] != season:
+                    regress_st(st, elo)
+                    last_season[team] = season
+                else:
+                    gap = day_ord - last_day[team]
+                    if gap >= 18:
+                        extra_q = Q_break
+                    else:
+                        extra_q = 0.0
+                    st["P_att"] = min(P_new, st["P_att"] + Q_match + extra_q)
+                    st["P_def"] = min(P_new, st["P_def"] + Q_match + extra_q)
+                last_day[team] = day_ord
+
+        sh = team_state[ht]
+        sa = team_state[at]
+        mu = math.log(max(0.5, league_avg_lam[div]))
+        hfa = league_hfa_lam[div]
+
+        # Pre-match prediction (strictly causal)
+        lh = math.exp(max(-1.5, min(1.8, mu + 0.5 * hfa + sh["att"] - sa["def"])))
+        la = math.exp(max(-1.5, min(1.8, mu - 0.5 * hfa + sa["att"] - sh["def"])))
+        if e_idx >= 0:
+            p1, px, p2 = bvd.poisson_1x2_dc(lh, la, rho=-0.065)
+            preds[e_idx, 0] = p1
+            preds[e_idx, 1] = px
+            preds[e_idx, 2] = p2
+
+        # Post-match update
+        gf_h = float(row.FTHome) if pd.notna(row.FTHome) else np.nan
+        gf_a = float(row.FTAway) if pd.notna(row.FTAway) else np.nan
+        if np.isnan(gf_h) or np.isnan(gf_a):
+            continue
+
+        if pd.notna(row.opta_npxg_h) and pd.notna(row.opta_npxg_a):
+            npxg_h = float(row.opta_npxg_h)
+            npxg_a = float(row.opta_npxg_a)
+        else:
+            npxg_h = min(3.5, 0.55 * gf_h + 0.45 * league_avg_npxg[div])
+            npxg_a = min(3.5, 0.55 * gf_a + 0.45 * league_avg_npxg[div])
+        league_avg_npxg[div] = 0.996 * league_avg_npxg[div] + 0.004 * (0.5 * (npxg_h + npxg_a))
+
+        p_mkt = bvd.devig_shin_single(row.PSCH, row.PSCD, row.PSCA)
+        if p_mkt is None:
+            p_mkt = bvd.devig_shin_single(row.PSH, row.PSD, row.PSA)
+        if p_mkt is None:
+            p_mkt = bvd.devig_shin_single(row.OddHome, row.OddDraw, row.OddAway)
+        if p_mkt is None:
+            continue
+
+        p_o25 = bvd.devig_two_way(row.FD_O25, row.FD_U25)
+        if np.isnan(p_o25):
+            p_o25 = bvd.devig_two_way(row.Over25, row.Under25)
+        if pd.notna(row.FD_AHh):
+            ahh = float(row.FD_AHh)
+        elif pd.notna(row.HandiSize):
+            ahh = float(row.HandiSize)
+        else:
+            ahh = np.nan
+        lam_mh, lam_ma = bvd.infer_market_lambdas(p_mkt[0], p_mkt[1], p_mkt[2], p_o25, ahh)
+
+        league_avg_lam[div] = 0.996 * league_avg_lam[div] + 0.004 * (0.5 * (lam_mh + lam_ma))
+        league_hfa_lam[div] = 0.996 * league_hfa_lam[div] + 0.004 * (
+            math.log(lam_mh / lam_ma) - (sh["att_s"] - sa["def_s"] - sa["att_s"] + sh["def_s"])
+        )
+        lh_s = math.exp(max(-1.5, min(1.8, mu + 0.5 * hfa + sh["att_s"] - sa["def_s"])))
+        la_s = math.exp(max(-1.5, min(1.8, mu - 0.5 * hfa + sa["att_s"] - sh["def_s"])))
+        ems_h = max(-1.5, min(1.5, math.log(lam_mh) - math.log(lh_s)))
+        ems_a = max(-1.5, min(1.5, math.log(lam_ma) - math.log(la_s)))
+        sh["att_s"] = 0.997 * sh["att_s"] + 0.09 * ems_h
+        sa["def_s"] = 0.997 * sa["def_s"] - 0.09 * ems_h
+        sa["att_s"] = 0.997 * sa["att_s"] + 0.09 * ems_a
+        sh["def_s"] = 0.997 * sh["def_s"] - 0.09 * ems_a
+
+        S_h = sh["P_att"] + sa["P_def"] + R_pin
+        S_a = sa["P_att"] + sh["P_def"] + R_pin
+        K_att_h = sh["P_att"] / S_h
+        K_def_a = sa["P_def"] / S_h
+        K_att_a = sa["P_att"] / S_a
+        K_def_h = sh["P_def"] / S_a
+
+        eh_p = max(-1.5, min(1.5, math.log(lam_mh) - math.log(lh)))
+        ea_p = max(-1.5, min(1.5, math.log(lam_ma) - math.log(la)))
+        eh_x = max(-2.5, min(2.5, 1.06 * npxg_h - lh))
+        ea_x = max(-2.5, min(2.5, 1.06 * npxg_a - la))
+
+        sh["att"] = (1.0 - decay) * sh["att"] + K_att_h * eh_p + (field_k_ratio * K_att_h) * eh_x
+        sa["def"] = (1.0 - decay) * sa["def"] - K_def_a * eh_p - (field_k_ratio * K_def_a) * eh_x
+        sa["att"] = (1.0 - decay) * sa["att"] + K_att_a * ea_p + (field_k_ratio * K_att_a) * ea_x
+        sh["def"] = (1.0 - decay) * sh["def"] - K_def_h * ea_p - (field_k_ratio * K_def_h) * ea_x
+
+        sh["P_att"] = max(0.02, (1.0 - K_att_h) * sh["P_att"])
+        sa["P_def"] = max(0.02, (1.0 - K_def_a) * sa["P_def"])
+        sa["P_att"] = max(0.02, (1.0 - K_att_a) * sa["P_att"])
+        sh["P_def"] = max(0.02, (1.0 - K_def_h) * sh["P_def"])
+
+    return preds
 
 
 def softmax_np(logits):
@@ -363,19 +571,20 @@ def main():
     oof_start, oof_end = folds[0][0], folds[-1][1]
     n_oof = oof_end - oof_start
 
-    # 1. Clean Generative Base (5 components, OOF-calibrated)
+    # 1. Clean Generative Base (5 components, OOF-calibrated; slot 0 = v2.1 Adaptive Riccati Dual-Gain Kalman!)
+    print("[train_v2] Computing v2.1 Adaptive Riccati Dual-Gain Kalman (D2 + T1f)...")
+    p_kalman_v21 = compute_v21_kalman_d2_t1f(n)
     gen_col_sets = [
-        ["p_mkt_f_1", "p_mkt_f_x", "p_mkt_f_2"],
         ["p_mkt_s_1", "p_mkt_s_x", "p_mkt_s_2"],
         ["ex_mkt_35d_p1", "ex_mkt_35d_px", "ex_mkt_35d_p2"],
         ["ex_dc_npxg_120d_p1", "ex_dc_npxg_120d_px", "ex_dc_npxg_120d_p2"],
         ["p_dc_blend_1", "p_dc_blend_x", "p_dc_blend_2"],
     ]
-    gen_comps = [df[cols].values for cols in gen_col_sets]
+    gen_comps = [p_kalman_v21] + [df[cols].values for cols in gen_col_sets]
     w_gen, T_gen = fit_dirichlet_blend([c[oof_start:oof_end] for c in gen_comps], y_oh[oof_start:oof_end])
     p_base_all = apply_blend(gen_comps, w_gen, T_gen)
     base_logits_all = np.log(np.clip(p_base_all, 1e-6, 1.0))
-    print(f"[train_v2] Gen_Base weights={np.round(w_gen, 3)} T={T_gen:.3f} | Test Brier={brier_score(p_base_all[s2:], y_oh[s2:]):.5f}")
+    print(f"[train_v2] Gen_Base weights={np.round(w_gen, 3)} T={T_gen:.3f} | OOF={brier_score(p_base_all[oof_start:oof_end], y_oh[oof_start:oof_end]):.5f} | Test Brier={brier_score(p_base_all[s2:], y_oh[s2:]):.5f}")
 
     Xm_all = df[MOT_COLS].values.astype(np.float64)
     Xr_all = df[RES_COLS].values.astype(np.float64)
@@ -493,7 +702,9 @@ def main():
 
     p_te_ens = apply_blend([p_base_all[s2:], te_lin, te_lgb, te_xgb, te_mlp], w_sl, T_sl)
     test_brier = brier_score(p_te_ens, y_oh[s2:])
-    print(f"[train_v2] VERIFIED BLIND TEST (2024/25) BRIER = {test_brier:.5f} (Lin={brier_score(te_lin, y_oh[s2:]):.5f}, LGBM={brier_score(te_lgb, y_oh[s2:]):.5f}, XGB={brier_score(te_xgb, y_oh[s2:]):.5f}, MLP={brier_score(te_mlp, y_oh[s2:]):.5f})")
+    test_ll = log_loss_score(p_te_ens, y[s2:])
+    oof_ll = log_loss_score(p_oof_cal, y[oof_start:oof_end])
+    print(f"[train_v2] VERIFIED BLIND TEST (2024/25) BRIER = {test_brier:.5f} | LL = {test_ll:.5f} (Lin={brier_score(te_lin, y_oh[s2:]):.5f}, LGBM={brier_score(te_lgb, y_oh[s2:]):.5f}, XGB={brier_score(te_xgb, y_oh[s2:]):.5f}, MLP={brier_score(te_mlp, y_oh[s2:]):.5f})")
 
     # 4. Fit FINAL PRODUCTION MODELS on 100% of 2015-2025 verified matches (16,268 matches!)
     print("[train_v2] Training final production models on all 16,268 verified matches...")
@@ -527,7 +738,7 @@ def main():
     mlp_states = train_mlp_models(base_logits_all, Xb_full, y, n_seeds=10, steps=300, wd=0.10, lr=0.0025)
 
     bundle = {
-        "version": "deep-pitch-v2.0",
+        "version": "deep-pitch-v2.1",
         "mot_cols": MOT_COLS,
         "res_cols": RES_COLS,
         "mot_medians": mot_med,
@@ -549,8 +760,10 @@ def main():
         "scaler_both": sc_b_prod,
         "metrics": {
             "oof_brier": brier_score(p_oof_cal, y_oh[oof_start:oof_end]),
+            "oof_logloss": oof_ll,
             "val_brier": brier_score(p_oof_cal[-1627:], y_oh[s1:s2]),
             "test_brier": test_brier,
+            "test_logloss": test_ll,
             "n_train_total": n,
         },
     }

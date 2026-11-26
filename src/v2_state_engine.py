@@ -592,6 +592,8 @@ class LiveV2StateEngine:
             "mkt_elo_f": elo_val, "mkt_elo_s": elo_val,
             "mkt_att_f": 0.18 * elo_n, "mkt_def_f": 0.18 * elo_n,
             "mkt_att_s": 0.18 * elo_n, "mkt_def_s": 0.18 * elo_n,
+            # Adaptive Riccati Kalman state variances (v2.1: high on newly promoted / unseen teams)
+            "P_att": 1.50, "P_def": 1.50,
             "dc_blend_att": 0.15 * elo_n, "dc_blend_def": 0.15 * elo_n,
             "mkt_surp_npxg_for": 0.0, "mkt_surp_npxg_ag": 0.0, "mkt_surp_pts": 0.0,
             "mkt_steam_f": 0.0, "mkt_steam_m": 0.0,
@@ -608,6 +610,8 @@ class LiveV2StateEngine:
     def _season_regress(self, st: Dict[str, float]):
         for k in ("mkt_att_f", "mkt_def_f", "mkt_att_s", "mkt_def_s", "dc_blend_att", "dc_blend_def"):
             st[k] *= 0.74
+        st["P_att"] = min(1.50, st["P_att"] + 0.50)
+        st["P_def"] = min(1.50, st["P_def"] + 0.50)
         st["mkt_elo_f"] = 0.68 * st["mkt_elo_f"] + 0.32 * 1650.0
         st["mkt_elo_s"] = 0.78 * st["mkt_elo_s"] + 0.22 * 1650.0
         st["mkt_surp_npxg_for"] *= 0.4
@@ -700,6 +704,7 @@ class LiveV2StateEngine:
                     continue
 
         last_season: Dict[str, str] = {}
+        last_day: Dict[str, int] = {}
         for div in TOP5_DIVS:
             self.league_online[div] = {
                 "avg_mkt_lam": 1.32, "hfa_mkt_lam": 0.28,
@@ -717,21 +722,31 @@ class LiveV2StateEngine:
             ht = row.H_canon
             at = row.A_canon
             dt = row.dt
-            seas = f"{dt.year}/{dt.year+1}" if dt.month >= 7 else f"{dt.year-1}/{dt.year}"
+            day_ord = int(dt.toordinal())
+            if dt.month >= 7:
+                seas = f"{dt.year}/{dt.year + 1}"
+            else:
+                seas = f"{dt.year - 1}/{dt.year}"
 
-            if ht not in self.team_state:
-                self.team_state[ht] = self._init_team()
-                last_season[ht] = seas
-            elif last_season[ht] != seas:
-                self._season_regress(self.team_state[ht])
-                last_season[ht] = seas
-
-            if at not in self.team_state:
-                self.team_state[at] = self._init_team()
-                last_season[at] = seas
-            elif last_season[at] != seas:
-                self._season_regress(self.team_state[at])
-                last_season[at] = seas
+            for team_name in (ht, at):
+                if team_name not in self.team_state:
+                    self.team_state[team_name] = self._init_team()
+                    last_season[team_name] = seas
+                    last_day[team_name] = day_ord
+                else:
+                    st_t = self.team_state[team_name]
+                    if last_season[team_name] != seas:
+                        self._season_regress(st_t)
+                        last_season[team_name] = seas
+                    else:
+                        gap = day_ord - last_day[team_name]
+                        if gap >= 18:
+                            extra_q = 0.10
+                        else:
+                            extra_q = 0.0
+                        st_t["P_att"] = min(1.50, st_t["P_att"] + 0.075 + extra_q)
+                        st_t["P_def"] = min(1.50, st_t["P_def"] + 0.075 + extra_q)
+                    last_day[team_name] = day_ord
 
             sh = self.team_state[ht]
             sa = self.team_state[at]
@@ -831,12 +846,30 @@ class LiveV2StateEngine:
                 log_mla = math.log(lam_ma)
 
                 lo_div["avg_mkt_lam"] = 0.996 * lo_div["avg_mkt_lam"] + 0.004 * (0.5 * (lam_mh + lam_ma))
+                # v2.1 Adaptive Riccati Kalman + Dual-Gain 100% npxG Reality Check (D2 + T1f)
+                R_pin = 1.0
+                field_k_ratio = 0.12
+                S_h = sh["P_att"] + sa["P_def"] + R_pin
+                S_a = sa["P_att"] + sh["P_def"] + R_pin
+                K_att_h = sh["P_att"] / S_h
+                K_def_a = sa["P_def"] / S_h
+                K_att_a = sa["P_att"] / S_a
+                K_def_h = sh["P_def"] / S_a
+
                 err_mf_h = max(-1.5, min(1.5, log_mlh - math.log(mkt_f_lh)))
                 err_mf_a = max(-1.5, min(1.5, log_mla - math.log(mkt_f_la)))
-                sh["mkt_att_f"] = 0.995 * sh["mkt_att_f"] + 0.22 * err_mf_h
-                sa["mkt_def_f"] = 0.995 * sa["mkt_def_f"] - 0.22 * err_mf_h
-                sa["mkt_att_f"] = 0.995 * sa["mkt_att_f"] + 0.22 * err_mf_a
-                sh["mkt_def_f"] = 0.995 * sh["mkt_def_f"] - 0.22 * err_mf_a
+                err_xg_h = max(-2.5, min(2.5, 1.06 * npxg_h - mkt_f_lh))
+                err_xg_a = max(-2.5, min(2.5, 1.06 * npxg_a - mkt_f_la))
+
+                sh["mkt_att_f"] = 0.995 * sh["mkt_att_f"] + K_att_h * err_mf_h + (field_k_ratio * K_att_h) * err_xg_h
+                sa["mkt_def_f"] = 0.995 * sa["mkt_def_f"] - K_def_a * err_mf_h - (field_k_ratio * K_def_a) * err_xg_h
+                sa["mkt_att_f"] = 0.995 * sa["mkt_att_f"] + K_att_a * err_mf_a + (field_k_ratio * K_att_a) * err_xg_a
+                sh["mkt_def_f"] = 0.995 * sh["mkt_def_f"] - K_def_h * err_mf_a - (field_k_ratio * K_def_h) * err_xg_a
+
+                sh["P_att"] = max(0.02, (1.0 - K_att_h) * sh["P_att"])
+                sa["P_def"] = max(0.02, (1.0 - K_def_a) * sa["P_def"])
+                sa["P_att"] = max(0.02, (1.0 - K_att_a) * sa["P_att"])
+                sh["P_def"] = max(0.02, (1.0 - K_def_h) * sh["P_def"])
 
                 err_ms_h = max(-1.5, min(1.5, log_mlh - math.log(mkt_s_lh)))
                 err_ms_a = max(-1.5, min(1.5, log_mla - math.log(mkt_s_la)))

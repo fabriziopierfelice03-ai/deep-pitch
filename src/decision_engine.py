@@ -16,19 +16,22 @@ def calculate_quarter_kelly(
     max_odds: float = 3.10,
     max_cap: float = 0.030,
     max_ev: float = 1.000,
+    kelly_fraction: float = 0.25,
 ) -> Dict[str, Any]:
     """
-    Calcola l'Expected Value e il dimensionamento dello stake con Quarter-Kelly.
+    Calcola l'Expected Value e il dimensionamento dello stake con Fractional Kelly
+    (default 0.25 = Quarter-Kelly; in DeepPitch v2.1: 0.125 = Eighth-Kelly, cap 2.0%).
 
     Parametri:
     - prob: probabilità stimata dal modello / calibrazione (compresa tra 0.0 e 1.0)
     - bookmaker_odds: quota decimale offerta dal bookmaker
     - bankroll: capitale totale attuale (default 1000.0€)
-    - min_ev: soglia minima di valore atteso (default 5.0% = 0.050)
-    - min_odds: quota minima ammissibile (default 1.60)
-    - max_odds: quota massima ammissibile (default 3.10)
-    - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 3.0% = 0.030)
-    - max_ev: soglia massima di valore atteso ammissibile (default 100.0% = 1.000; in v2 8.0% anti-adverse-selection)
+    - min_ev: soglia minima di valore atteso (default 5.0% = 0.050; in v2.1 2.5%)
+    - min_odds: quota minima ammissibile (default 1.60; in v2.1 1.35)
+    - max_odds: quota massima ammissibile (default 3.10; in v2.1 6.00)
+    - max_cap: quota massima del bankroll allocabile su una singola scommessa (default 3.0%; in v2.1 2.0%)
+    - max_ev: soglia massima di valore atteso ammissibile (default 100.0%; in v2.1 6.0% anti-adverse-selection)
+    - kelly_fraction: moltiplicatore frazionale di Kelly (default 0.25; in v2.1 0.125)
     """
     if bookmaker_odds <= 1.0 or prob <= 0.0 or prob > 1.0:
         return {
@@ -72,11 +75,11 @@ def calculate_quarter_kelly(
     b = bookmaker_odds - 1.0
     kelly_star = ev / b
 
-    # Quarter-Kelly: riduce drasticamente il drawdown e la varianza
-    quarter_kelly = kelly_star * 0.25
+    # Fractional Kelly (0.25 default, 0.125 in v2.1): riduce drasticamente drawdown e varianza
+    fractional_kelly = kelly_star * kelly_fraction
 
-    # Hard Cap di portafoglio: max 3.0% del bankroll per singola posizione
-    capped_fraction = max(0.0, min(quarter_kelly, max_cap))
+    # Hard Cap di portafoglio per singola posizione
+    capped_fraction = max(0.0, min(fractional_kelly, max_cap))
     stake_eur = round(bankroll * capped_fraction, 2)
 
     fair_odds = round(1.0 / prob, 2)
@@ -87,7 +90,7 @@ def calculate_quarter_kelly(
         "fair_odds": fair_odds,
         "bookmaker_odds": bookmaker_odds,
         "ev_perc": round(ev * 100, 2),
-        "kelly_raw_perc": round(quarter_kelly * 100, 2),
+        "kelly_raw_perc": round(fractional_kelly * 100, 2),
         "applied_fraction_perc": round(capped_fraction * 100, 2),
         "stake_eur": stake_eur,
     }
