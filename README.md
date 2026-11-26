@@ -97,11 +97,15 @@ Evaluated on the exact **16,268 Top-5 historical dataset** (`2015–2025`) using
 * **All 6 Seasons OOS (`9,768` matches `2019–2025`):** `v2.1` improves over `v2.0` by `-0.00045` Brier (`z = -2.11`, `p = 0.035`), nearly doubling realized CLV vs Pinnacle Close (`+0.30% → +0.61%` on `MaxOdds`, `EV ∈ [2.5%, 6.0%)`: `+3.47%` ROI, `€1,000 → €2,214`).
 
 <p align="center">
-  <img src="docs/charts/01_brier_ablation.png" alt="DeepPitch v2.1 Out-of-Sample Brier Progression" width="94%" />
+  <img src="docs/charts/01_brier_ablation.png" alt="DeepPitch v2.2 Out-of-Sample Brier Progression" width="94%" />
 </p>
 
 <p align="center">
-  <img src="docs/charts/02_calibration_reliability.png" alt="DeepPitch v2.1 6-Season OOS Reliability Curves" width="98%" />
+  <img src="docs/charts/02_calibration_reliability.png" alt="DeepPitch v2.2 6-Season OOS Reliability Curves" width="98%" />
+</p>
+
+<p align="center">
+  <img src="docs/charts/06_calibration_deciles.png" alt="DeepPitch v2.2 Probability Calibration by 10% Buckets (1X2 & Over/Under 2.5)" width="98%" />
 </p>
 
 ### 2. Live Blind Validation on `2026/27` (`Aug–Nov 2026`) — Impact of Fresh Injuries & Lineups
@@ -132,7 +136,7 @@ Why **`EV ∈ [2.5%, 6.0%)`**? Empirical diagnostics across `9,768` OOS matches 
 *(Max Drawdown over all 6 seasons compounded: `34.1%`; on the Blind `2024/25` season: `16.7%`. Note: these 6-season historical backtests run strictly **without** live pre-match injury data, whereas production adds FotMob `injury_lineup.py` fresh-starter adjustments & trap blocking.)*
 
 <p align="center">
-  <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2.1 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
+  <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2.2 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
 </p>
 
 ### 4. Dual-Market Expansion: Over / Under 2.5 Goals (`v2.2`, `EV ∈ [2.5%, 8.0%)`)
