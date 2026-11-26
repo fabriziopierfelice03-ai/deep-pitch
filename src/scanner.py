@@ -229,8 +229,8 @@ def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, s
     
     eng_tag = str(scan_summary.get('engine', 'v2')).upper()
     if eng_tag == "V2":
-        eng_display = "V2.1"
-        ev_rule = "EV ∈ [2.5%, 6.0%)"
+        eng_display = "V2.2"
+        ev_rule = "1X2: EV ∈ [2.5%, 6.0%) | O/U 2.5: EV ∈ [2.5%, 8.0%)"
         kelly_label = "Quarter-Kelly"
     else:
         eng_display = eng_tag
@@ -407,6 +407,84 @@ def fetch_betexplorer_best_odds(match_href: str) -> Optional[Dict[str, Any]]:
         return {
             "best": (best_q["1"], best_q["X"], best_q["2"]),
             "books": best_books,
+            "n_bookmakers": len(bookies),
+        }
+    except Exception:
+        return None
+
+
+def fetch_betexplorer_ou25_odds(match_href: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetches live per-bookmaker Over/Under 2.5 Goals odds across active Italian ADM
+    bookmakers from BetExplorer's AJAX endpoint (/ou/odds/?lang=it) and returns the
+    best available odd, consensus average, and bookmaker names for 'Over 2.5' / 'Under 2.5'.
+    """
+    if not match_href:
+        return None
+    parts = [p for p in match_href.strip('/').split('/') if p]
+    if not parts:
+        return None
+    match_id = parts[-1]
+    ep = f"https://www.betexplorer.com/match-odds/{match_id}/0/ou/odds/?lang=it"
+    if match_href.startswith('/'):
+        ref = f"https://www.betexplorer.com{match_href}"
+    else:
+        ref = match_href
+    req = urllib.request.Request(
+        ep,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': ref,
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read().decode('utf-8', errors='ignore'))
+        odds_html = payload.get('odds', '')
+        if not odds_html:
+            return None
+
+        bookies = []
+        for attrs, row in re.findall(r'<tr([^>]*)>(.*?)</tr>', odds_html, re.DOTALL):
+            if 'inactive' in attrs.lower():
+                continue
+            m_line = re.search(r'class="table-main__doubleparameter"[^>]*>\s*([^<\s]+)\s*<', row)
+            if not m_line or m_line.group(1).strip() != "2.5":
+                continue
+            vals = re.findall(r'data-odd="([0-9\.]+)"', row)
+            if len(vals) < 2:
+                continue
+            m_ev = re.search(r"'event-name'\s*:\s*'([^']+)'", row)
+            if m_ev:
+                bname = m_ev.group(1).strip()
+            else:
+                m_t = re.search(r'title="([^"]+)"', row)
+                if m_t:
+                    bname = m_t.group(1).strip()
+                else:
+                    bname = "Bookmaker"
+            try:
+                qo, qu = float(vals[0]), float(vals[1])
+                if qo > 1.01 and qu > 1.01:
+                    bookies.append((bname, qo, qu))
+            except ValueError:
+                continue
+
+        if not bookies:
+            return None
+
+        best_o = max(b[1] for b in bookies)
+        best_u = max(b[2] for b in bookies)
+        avg_o = round(sum(b[1] for b in bookies) / len(bookies), 2)
+        avg_u = round(sum(b[2] for b in bookies) / len(bookies), 2)
+        books_o = [b[0] for b in bookies if abs(b[1] - best_o) < 1e-6]
+        books_u = [b[0] for b in bookies if abs(b[2] - best_u) < 1e-6]
+
+        return {
+            "best": (best_o, best_u),
+            "avg": (avg_o, avg_u),
+            "books": {"Over 2.5": books_o, "Under 2.5": books_u},
             "n_bookmakers": len(bookies),
         }
     except Exception:
@@ -792,6 +870,7 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
     # 3. Evaluate each fixture
     evaluated_results = []
     qualified_1x2_bets = []
+    qualified_ou25_bets = []
     qualified_dnb_bets = []
     audit_rows = []
     skipped_no_odds = 0
@@ -908,11 +987,17 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
                 total_games=total_games,
                 rel_pos_1idx=lconf["rel"],
             )
+            ou25_info = fetch_betexplorer_ou25_odds(match_href)
+            if ou25_info is not None:
+                ou25_avg_odds = list(ou25_info["avg"])
+            else:
+                ou25_avg_odds = None
             pred_v2 = predici_partita_v2(
                 v2_payload,
                 market_odds=[avg_q1, avg_qx, avg_q2],
                 injury_report=injury_report,
                 devig_method="shin",
+                ou25_odds=ou25_avg_odds,
             )
             p1, px, p2 = pred_v2["Final_1X2"]["Probs_Float"]
             raw_v2_p = pred_v2["V2_Raw_1X2"]["Probabilita_%"]
@@ -924,6 +1009,8 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
             kelly_frac_thr = 0.250
             max_cap_thr = 0.030
         else:
+            ou25_info = None
+            pred_v2 = None
             features = build_56_features(
                 home_elo=h_elo,
                 away_elo=a_elo,
@@ -1038,7 +1125,59 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
             "trap_blocked_reason": match_trap_reason,
         })
 
-        # Track 2: Shadow Ghost DNB
+        # Track 2 (v2.2 Official): Over / Under 2.5 Goals (EV in [2.5%, 8.0%), Quarter-Kelly 3% cap, 11 ADM bookmakers)
+        if engine == "v2" and pred_v2 is not None and ou25_info is not None and "Over_Under_25" in pred_v2:
+            p_over, p_under = pred_v2["Over_Under_25"]["Probs_Float"]
+            q_over, q_under = ou25_info["best"]
+            avg_qo, avg_qu = ou25_info["avg"]
+            ou_books = ou25_info["books"]
+            ou_odds_map = {"Over 2.5": q_over, "Under 2.5": q_under}
+            ou_avg_map = {"Over 2.5": avg_qo, "Under 2.5": avg_qu}
+            ou_probs_map = {"Over 2.5": p_over, "Under 2.5": p_under}
+
+            best_ou_sel = None
+            best_ou_dec = None
+            for ou_sel in ("Over 2.5", "Under 2.5"):
+                dec_ou = calculate_quarter_kelly(
+                    prob=ou_probs_map[ou_sel],
+                    bookmaker_odds=ou_odds_map[ou_sel],
+                    bankroll=current_bankroll,
+                    min_ev=0.025,
+                    min_odds=1.35,
+                    max_odds=6.00,
+                    max_cap=0.030,
+                    max_ev=0.080,
+                    kelly_fraction=0.250,
+                )
+                if dec_ou["actionable"]:
+                    if best_ou_dec is None or dec_ou["ev_perc"] > best_ou_dec["ev_perc"]:
+                        best_ou_sel = ou_sel
+                        best_ou_dec = dec_ou
+
+            if best_ou_sel is not None and best_ou_dec is not None:
+                ou_books_str = ", ".join(ou_books.get(best_ou_sel, []))
+                qualified_ou25_bets.append({
+                    "date": t_str[:10],
+                    "league": lcode,
+                    "match": title,
+                    "selection": best_ou_sel,
+                    "bookmaker_odds": ou_odds_map[best_ou_sel],
+                    "avg_odds": ou_avg_map[best_ou_sel],
+                    "best_bookmakers": ou_books_str,
+                    "fair_odds": best_ou_dec["fair_odds"],
+                    "model_prob": best_ou_dec["prob_perc"],
+                    "ev_perc": best_ou_dec["ev_perc"],
+                    "stake_eur": best_ou_dec["stake_eur"],
+                    "applied_fraction": best_ou_dec["applied_fraction_perc"],
+                    "injury_note": "",
+                })
+                print(
+                    f"  >>> [VALUE O/U 2.5 V2.2] {best_ou_sel} @ {ou_odds_map[best_ou_sel]:.2f} [{ou_books_str}] "
+                    f"(Media: {ou_avg_map[best_ou_sel]:.2f}) | P={best_ou_dec['prob_perc']:.1f}% | "
+                    f"EV: +{best_ou_dec['ev_perc']:.2f}% | Stake: EUR {best_ou_dec['stake_eur']:.2f}"
+                )
+
+        # Track 3: Shadow Ghost DNB
         q_dnb_1 = round(max(q1 * (1.0 - 1.0 / qx), q1 * (1.0 - 1.0 / qx) * 1.02), 2)
         q_dnb_2 = round(max(q2 * (1.0 - 1.0 / qx), q2 * (1.0 - 1.0 / qx) * 1.02), 2)
         p_dnb_1 = p1 / (p1 + p2) if (p1 + p2) > 0 else 0.5
@@ -1066,24 +1205,33 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
                 })
 
     qualified_1x2_bets.sort(key=lambda x: -x['ev_perc'])
+    qualified_ou25_bets.sort(key=lambda x: -x['ev_perc'])
     qualified_dnb_bets.sort(key=lambda x: -x['ev_perc'])
 
     if engine == "v2" and audit_rows:
         append_v2_audit_rows(audit_rows)
 
     print("\n==========================================================================")
-    print(f"              RIEPILOGO SCANSIONE UFFICIALE ({engine.upper()})")
+    if engine == "v2":
+        hdr_eng = "V2.2"
+        ev_lbl = "EV in [2.5%, 6.0%)"
+    else:
+        hdr_eng = engine.upper()
+        ev_lbl = "EV >= +5.0%"
+    print(f"              RIEPILOGO SCANSIONE UFFICIALE ({hdr_eng})")
     print("==========================================================================")
     print(f"[*] Incontri con Quote Verificate Analizzati: {len(target_fixtures) - skipped_no_odds}")
     print(f"[*] Incontri Senza Quote (Saltati per Sicurezza): {skipped_no_odds}")
     print(f"[*] Trappole Infortuni/Turnover Bloccate: {traps_blocked}")
-    ev_lbl = "EV in [1.0%, 8.0%)" if engine == "v2" else "EV >= +5.0%"
     print(f"[*] Selezioni Ufficiali 1X2 Qualificate ({ev_lbl}): {len(qualified_1x2_bets)}")
+    print(f"[*] Selezioni Ufficiali Over/Under 2.5 Qualificate (EV in [2.5%, 8.0%)): {len(qualified_ou25_bets)}")
     print(f"[*] Selezioni Shadow DNB Qualificate: {len(qualified_dnb_bets)}")
 
+    all_official_bets = qualified_1x2_bets + qualified_ou25_bets
+
     # Sanity Anomaly Guard
-    if len(qualified_1x2_bets) > 15:
-        print("\n[ALERT] Rilevato volume anomalo di selezioni (> 15). Controllo di sicurezza attivato.")
+    if len(all_official_bets) > 25:
+        print("\n[ALERT] Rilevato volume anomalo di selezioni (> 25). Controllo di sicurezza attivato.")
 
     res = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1093,6 +1241,7 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
         "skipped_no_odds": skipped_no_odds,
         "traps_blocked": traps_blocked,
         "qualified_1x2_bets": qualified_1x2_bets,
+        "qualified_ou25_bets": qualified_ou25_bets,
         "qualified_dnb_bets": qualified_dnb_bets
     }
 
@@ -1100,7 +1249,7 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
         print("\n==========================================================================")
         print("          PUBBLICAZIONE AUTOMATICA & SINCRONIZZAZIONE (--publish)")
         print("==========================================================================")
-        newly_added = append_bets_to_tracking(qualified_1x2_bets, TRACKING_CSV)
+        newly_added = append_bets_to_tracking(all_official_bets, TRACKING_CSV)
         if newly_added:
             git_commit_and_push(TRACKING_CSV, len(newly_added))
         send_telegram_scan_digest(newly_added, current_bankroll, res)

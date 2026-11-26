@@ -78,6 +78,7 @@ def predici_partita_v2(
     market_odds: Optional[List[float]] = None,
     injury_report: Optional[Dict[str, Any]] = None,
     devig_method: str = "shin",
+    ou25_odds: Optional[List[float]] = None,
 ) -> Dict[str, Any]:
     """
     Runs the 5-Head Deep-Pitch v2 Ensemble on a single live fixture payload,
@@ -210,5 +211,40 @@ def predici_partita_v2(
             },
             "Shin_Z": round(float(shin_z), 5),
         }
+
+    # 9. Over / Under 2.5 Goals (v2.2 OOF-Platt calibrated Dixon-Coles from Riccati Dual-Gain Kalman)
+    p_o25_raw = v2_payload.get("p_over25_raw")
+    if p_o25_raw is not None and np.isfinite(p_o25_raw):
+        p_o_clip = float(max(1e-6, min(1.0 - 1e-6, float(p_o25_raw))))
+        ou_cal = bundle.get("ou25_calibrator", {"a": 1.0, "b": 0.0})
+        a_ou = float(ou_cal.get("a", 1.0))
+        b_ou = float(ou_cal.get("b", 0.0))
+        ou_logit = float(np.log(p_o_clip / (1.0 - p_o_clip)))
+        p_over = float(1.0 / (1.0 + np.exp(-(a_ou * ou_logit + b_ou))))
+        p_under = float(1.0 - p_over)
+        kalman_lams = v2_payload.get("kalman_lambdas", [1.35, 1.30])
+        res["Over_Under_25"] = {
+            "Probabilita_%": {
+                "Over 2.5": round(p_over * 100.0, 2),
+                "Under 2.5": round(p_under * 100.0, 2),
+            },
+            "Fair_Odds": {
+                "Over 2.5": round(1.0 / max(p_over, 1e-6), 2),
+                "Under 2.5": round(1.0 / max(p_under, 1e-6), 2),
+            },
+            "Probs_Float": [p_over, p_under],
+            "Expected_Goals_Total": round(float(kalman_lams[0]) + float(kalman_lams[1]), 2),
+        }
+        if ou25_odds is not None and len(ou25_odds) == 2 and ou25_odds[0] > 1.0 and ou25_odds[1] > 1.0:
+            io = 1.0 / float(ou25_odds[0])
+            iu = 1.0 / float(ou25_odds[1])
+            s_ou = io + iu
+            res["Over_Under_25"]["Market_Reference"] = {
+                "Market_Odds": {"Over 2.5": ou25_odds[0], "Under 2.5": ou25_odds[1]},
+                "De_Vigged_Market_%": {
+                    "Over 2.5": round((io / s_ou) * 100.0, 2),
+                    "Under 2.5": round((iu / s_ou) * 100.0, 2),
+                },
+            }
 
     return res

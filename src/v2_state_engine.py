@@ -205,6 +205,30 @@ def poisson_1x2_dc(lam_h: float, lam_a: float, rho: float = -0.065, max_g: int =
     return float(np.tril(mat, k=-1).sum()), float(np.trace(mat)), float(np.triu(mat, k=1).sum())
 
 
+def poisson_over25_dc(lam_h: float, lam_a: float, rho: float = -0.065, max_g: int = 10) -> float:
+    """Exact Dixon-Coles probability P(Goals_Home + Goals_Away >= 3) from implied lambdas."""
+    lam_h = max(0.15, min(6.0, float(lam_h)))
+    lam_a = max(0.15, min(6.0, float(lam_a)))
+    ph = np.empty(max_g + 1, dtype=np.float64)
+    pa = np.empty(max_g + 1, dtype=np.float64)
+    ph[0] = math.exp(-lam_h)
+    pa[0] = math.exp(-lam_a)
+    for k in range(1, max_g + 1):
+        ph[k] = ph[k - 1] * lam_h / k
+        pa[k] = pa[k - 1] * lam_a / k
+    mat = np.outer(ph, pa)
+    mat[0, 0] *= max(0.01, 1.0 - lam_h * lam_a * rho)
+    mat[1, 0] *= max(0.01, 1.0 + lam_a * rho)
+    mat[0, 1] *= max(0.01, 1.0 + lam_h * rho)
+    mat[1, 1] *= max(0.01, 1.0 - rho)
+    tot = float(mat.sum())
+    if tot <= 0.0:
+        return 0.50
+    mat /= tot
+    p_under25 = float(mat[0, 0] + mat[1, 0] + mat[0, 1] + mat[2, 0] + mat[1, 1] + mat[0, 2])
+    return float(max(1e-6, min(1.0 - 1e-6, 1.0 - p_under25)))
+
+
 def solve_total_goals_from_over25(p_o25: float) -> float:
     if np.isnan(p_o25) or p_o25 <= 0.02 or p_o25 >= 0.98:
         return 2.65
@@ -1080,8 +1104,12 @@ class LiveV2StateEngine:
             "is_F1": 1.0 if div == "F1" else 0.0,
         }
 
+        p_over25_raw = poisson_over25_dc(mf_lh, mf_la, rho=-0.065)
+
         return {
             "gen_components": [p_mkt_f, p_mkt_s, p_ex_mkt35, p_ex_dc120, p_dc_bl],
+            "kalman_lambdas": [float(mf_lh), float(mf_la)],
+            "p_over25_raw": float(p_over25_raw),
             "mot_features": mot_dict,
             "res_features": res_dict,
             "known_home": ht in self.team_state,

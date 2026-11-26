@@ -76,6 +76,38 @@ def log_loss_score(probs, y):
     return float(-np.mean(np.log(p[np.arange(len(y)), y])))
 
 
+def brier_binary(probs, y_bin):
+    return float(np.mean((probs - y_bin) ** 2))
+
+
+def ll_binary(probs, y_bin):
+    pc = np.clip(probs, 1e-7, 1.0 - 1e-7)
+    return float(-np.mean(y_bin * np.log(pc) + (1.0 - y_bin) * np.log(1.0 - pc)))
+
+
+def poisson_over25_dc(lam_h, lam_a, rho=-0.065, max_g=10):
+    lam_h = max(0.15, min(6.0, float(lam_h)))
+    lam_a = max(0.15, min(6.0, float(lam_a)))
+    ph = np.empty(max_g + 1, dtype=np.float64)
+    pa = np.empty(max_g + 1, dtype=np.float64)
+    ph[0] = math.exp(-lam_h)
+    pa[0] = math.exp(-lam_a)
+    for k in range(1, max_g + 1):
+        ph[k] = ph[k - 1] * lam_h / k
+        pa[k] = pa[k - 1] * lam_a / k
+    mat = np.outer(ph, pa)
+    mat[0, 0] *= max(0.01, 1.0 - lam_h * lam_a * rho)
+    mat[1, 0] *= max(0.01, 1.0 + lam_a * rho)
+    mat[0, 1] *= max(0.01, 1.0 + lam_h * rho)
+    mat[1, 1] *= max(0.01, 1.0 - rho)
+    tot = float(mat.sum())
+    if tot <= 0.0:
+        return 0.50
+    mat /= tot
+    u25 = float(mat[0, 0] + mat[1, 0] + mat[0, 1] + mat[2, 0] + mat[1, 1] + mat[0, 2])
+    return float(max(1e-6, min(1.0 - 1e-6, 1.0 - u25)))
+
+
 def compute_v21_kalman_d2_t1f(n_bench):
     """
     Recomputes the strictly causal (t' < t) v2.1 Adaptive Riccati Dual-Gain Kalman
@@ -128,6 +160,7 @@ def compute_v21_kalman_d2_t1f(n_bench):
     last_season = {}
     last_day = {}
     preds = np.full((n_bench, 3), np.nan, dtype=np.float64)
+    p_over25_raw = np.full(n_bench, np.nan, dtype=np.float64)
 
     def init_st(elo):
         if not np.isnan(elo):
@@ -197,6 +230,7 @@ def compute_v21_kalman_d2_t1f(n_bench):
             preds[e_idx, 0] = p1
             preds[e_idx, 1] = px
             preds[e_idx, 2] = p2
+            p_over25_raw[e_idx] = poisson_over25_dc(lh, la, rho=-0.065)
 
         # Post-match update
         gf_h = float(row.FTHome) if pd.notna(row.FTHome) else np.nan
@@ -266,7 +300,7 @@ def compute_v21_kalman_d2_t1f(n_bench):
         sa["P_att"] = max(0.02, (1.0 - K_att_a) * sa["P_att"])
         sh["P_def"] = max(0.02, (1.0 - K_def_h) * sh["P_def"])
 
-    return preds
+    return preds, p_over25_raw
 
 
 def softmax_np(logits):
@@ -571,9 +605,27 @@ def main():
     oof_start, oof_end = folds[0][0], folds[-1][1]
     n_oof = oof_end - oof_start
 
-    # 1. Clean Generative Base (5 components, OOF-calibrated; slot 0 = v2.1 Adaptive Riccati Dual-Gain Kalman!)
-    print("[train_v2] Computing v2.1 Adaptive Riccati Dual-Gain Kalman (D2 + T1f)...")
-    p_kalman_v21 = compute_v21_kalman_d2_t1f(n)
+    # 1. Clean Generative Base (5 components, OOF-calibrated; slot 0 = v2.2 Adaptive Riccati Dual-Gain Kalman!)
+    print("[train_v2] Computing v2.2 Adaptive Riccati Dual-Gain Kalman (1X2 + Over/Under 2.5)...")
+    p_kalman_v21, p_over25_raw = compute_v21_kalman_d2_t1f(n)
+
+    # Fit 2-param Platt calibrator for Over/Under 2.5 strictly on OOF (zero Blind Test leakage!)
+    y_o25 = ((df["gol_casa"].values + df["gol_trasferta"].values) >= 3).astype(np.float64)
+    ou_logits = np.log(np.clip(p_over25_raw, 1e-6, 1.0 - 1e-6) / (1.0 - np.clip(p_over25_raw, 1e-6, 1.0 - 1e-6)))
+
+    def ou_platt_obj(params):
+        a_c, b_c = params[0], params[1]
+        p_c = 1.0 / (1.0 + np.exp(-(a_c * ou_logits[oof_start:oof_end] + b_c)))
+        return brier_binary(p_c, y_o25[oof_start:oof_end])
+
+    res_ou = opt.minimize(ou_platt_obj, x0=[1.0, 0.0], method="Nelder-Mead")
+    ou_a, ou_b = float(res_ou.x[0]), float(res_ou.x[1])
+    p_o25_cal = 1.0 / (1.0 + np.exp(-(ou_a * ou_logits + ou_b)))
+    ou_oof_brier = brier_binary(p_o25_cal[oof_start:oof_end], y_o25[oof_start:oof_end])
+    ou_oof_ll = ll_binary(p_o25_cal[oof_start:oof_end], y_o25[oof_start:oof_end])
+    ou_te_brier = brier_binary(p_o25_cal[s2:], y_o25[s2:])
+    ou_te_ll = ll_binary(p_o25_cal[s2:], y_o25[s2:])
+    print(f"[train_v2] Over/Under 2.5 Platt (a={ou_a:.4f}, b={ou_b:+.4f}) | OOF Brier={ou_oof_brier:.5f} (LL={ou_oof_ll:.5f}) | Blind Test Brier={ou_te_brier:.5f} (LL={ou_te_ll:.5f})")
     gen_col_sets = [
         ["p_mkt_s_1", "p_mkt_s_x", "p_mkt_s_2"],
         ["ex_mkt_35d_p1", "ex_mkt_35d_px", "ex_mkt_35d_p2"],
@@ -738,7 +790,7 @@ def main():
     mlp_states = train_mlp_models(base_logits_all, Xb_full, y, n_seeds=10, steps=300, wd=0.10, lr=0.0025)
 
     bundle = {
-        "version": "deep-pitch-v2.1",
+        "version": "deep-pitch-v2.2",
         "mot_cols": MOT_COLS,
         "res_cols": RES_COLS,
         "mot_medians": mot_med,
@@ -758,12 +810,23 @@ def main():
         "xgb_models": xgb_models,
         "mlp_states": mlp_states,
         "scaler_both": sc_b_prod,
+        "ou25_calibrator": {
+            "a": ou_a,
+            "b": ou_b,
+            "oof_brier": ou_oof_brier,
+            "oof_logloss": ou_oof_ll,
+            "test_brier": ou_te_brier,
+            "test_logloss": ou_te_ll,
+        },
         "metrics": {
             "oof_brier": brier_score(p_oof_cal, y_oh[oof_start:oof_end]),
             "oof_logloss": oof_ll,
             "val_brier": brier_score(p_oof_cal[-1627:], y_oh[s1:s2]),
             "test_brier": test_brier,
             "test_logloss": test_ll,
+            "ou25_oof_brier": ou_oof_brier,
+            "ou25_test_brier": ou_te_brier,
+            "ou25_test_logloss": ou_te_ll,
             "n_train_total": n,
         },
     }

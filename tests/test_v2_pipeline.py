@@ -19,8 +19,9 @@ from src.injury_lineup import (
     apply_injury_lineup_adjustment,
     check_injury_trap_guard,
 )
-from src.v2_state_engine import compute_live_motivation_features, canon_team, LiveV2StateEngine
+from src.v2_state_engine import compute_live_motivation_features, canon_team, LiveV2StateEngine, poisson_over25_dc
 from src.predict_v2 import predici_partita_v2
+from src.settle_matches import evaluate_bet_outcome
 
 
 def test_decision_engine_max_ev_guard():
@@ -127,9 +128,26 @@ def test_v2_end_to_end_inference():
         home_pts=28.0, away_pts=21.0, matchday=12.0,
         standings_rows=[], total_games=38, rel_pos_1idx=18,
     )
-    out = predici_partita_v2(payload, market_odds=[1.85, 3.60, 4.20])
+    out = predici_partita_v2(payload, market_odds=[1.85, 3.60, 4.20], ou25_odds=[1.82, 2.02])
     probs = out["Final_1X2"]["Probs_Float"]
     assert len(probs) == 3
     assert abs(sum(probs) - 1.0) < 1e-6
     assert probs[0] > probs[2]
     assert "Market_Reference" in out
+    assert "Over_Under_25" in out
+    ou_probs = out["Over_Under_25"]["Probs_Float"]
+    assert len(ou_probs) == 2
+    assert abs(sum(ou_probs) - 1.0) < 1e-6
+    assert 0.15 < ou_probs[0] < 0.85
+    assert "Market_Reference" in out["Over_Under_25"]
+
+
+def test_v22_over_under_25_math_and_settlement():
+    p_low = poisson_over25_dc(0.8, 0.7)
+    p_high = poisson_over25_dc(2.1, 1.7)
+    assert 0.05 < p_low < 0.30
+    assert 0.65 < p_high < 0.95
+    assert evaluate_bet_outcome("Over 2.5", 2, 1)[1] is True
+    assert evaluate_bet_outcome("Over 2.5", 1, 1)[1] is False
+    assert evaluate_bet_outcome("Under 2.5", 1, 1)[1] is True
+    assert evaluate_bet_outcome("Under 2.5", 3, 0)[1] is False

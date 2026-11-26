@@ -1,16 +1,16 @@
 <div align="center">
 
-# DeepPitch v2.1
+# DeepPitch v2.2
 
-### Quantitative Football Pricing, Adaptive Riccati Dual-Gain Kalman & Model-Based Bellman RL Dynamic Hedging
+### Dual-Market Quantitative Football Pricing (`1X2` + `Over/Under 2.5`), Adaptive Riccati Dual-Gain Kalman & Bellman RL Dynamic Hedging
 
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![C++20 Engine](https://img.shields.io/badge/Live%20Sentinel-C%2B%2B20-00599C?style=flat-square&logo=cplusplus&logoColor=white)](#autonomous-in-play-risk-sentinel-c20-bellman-rl-engine)
-[![Blind Brier 2024/25](https://img.shields.io/badge/Blind%2024%2F25%20Brier-0.57279-2ea043?style=flat-square)](#1-probabilistic-accuracy-brier-score--strictly-zero-current-match-odds-leakage)
-[![OOS Sample](https://img.shields.io/badge/OOS%20Evaluation-9%2C768%20Matches-58a6ff?style=flat-square)](#out-of-sample-quantitative-benchmarks)
-[![Tests](https://img.shields.io/badge/Pytest%20%2B%20C%2B%2B20%20Tests-20%2F20%20Passing-2ea043?style=flat-square)](#3-run-the-full-test-suite)
+[![Blind 1X2 Brier](https://img.shields.io/badge/Blind%2024%2F25%201X2%20Brier-0.57279-2ea043?style=flat-square)](#1-probabilistic-accuracy-brier-score--strictly-zero-current-match-odds-leakage)
+[![O/U 2.5 OOF Brier](https://img.shields.io/badge/O%2FU%202.5%20OOF%20Brier-0.23865%20%3C%20PinOpen-2ea043?style=flat-square)](#4-dual-market-expansion-over--under-25-goals-v22)
+[![Tests](https://img.shields.io/badge/Pytest%20%2B%20C%2B%2B20%20Tests-21%2F21%20Passing-2ea043?style=flat-square)](#3-run-the-full-test-suite)
 
-*Zero-leakage statistical inference & line shopping across Europe's Top-5 football leagues (`E0`, `I1`, `SP1`, `D1`, `F1`), coupled with a private 1Hz C++20 Model-Based Reinforcement Learning execution daemon.*
+*Zero-leakage dual-market (`1X2` + `Over/Under 2.5`) statistical inference & 11-book ADM line shopping across Europe's Top-5 football leagues (`E0`, `I1`, `SP1`, `D1`, `F1`), coupled with a private 1Hz C++20 Model-Based Reinforcement Learning execution daemon.*
 
 </div>
 
@@ -18,7 +18,7 @@
 
 ## Executive Summary & Architecture
 
-DeepPitch **v2.1** replaces the legacy single-MLP architecture (`v1`, blind test Brier `0.58463`) and upgrades `v2.0` (`0.57365`) with an **Adaptive Riccati Dual-Gain Kalman Filter** coupling past Pinnacle implied goal rates with real match-level Opta/FotMob `npxG` shocks directly inside the latent state recurrence. This slashes out-of-sample Brier error by **`-0.01184`** vs `v1` (and **`-0.00110`** vs `v2.0`, statistically significant at `p = 0.035` over `9,768` OOS matches) down to **`0.57279`** (`Log-Loss = 0.96313`) on the 2024/25 blind test set — **beating Pinnacle Opening odds in the Premier League (`0.56513` vs `0.56565`) without seeing a single current-match odd** — while remaining **100% automated on free public data feeds** (FotMob/Opta, ClubElo, `football-data.co.uk`, BetExplorer):
+DeepPitch **v2.2** upgrades the `v2.1` **Adaptive Riccati Dual-Gain Kalman** (`1X2` Blind Test Brier **`0.57279`**, `Log-Loss = 0.96313`, statistically significant `p = 0.035` over `9,768` OOS matches, **beating Pinnacle Opening odds in the Premier League at `0.56513` vs `0.56565`**) with a full **Track 2: Over / Under 2.5 Goals** pricing & ADM line-shopping engine derived directly from the exact same latent $(\lambda_H, \lambda_A)$ Dixon-Coles matrix (`OOF Brier = 0.23865` across `8,817` matches — **below Pinnacle Opening `0.23875` without seeing current-match odds**, compounding `€1,000 → €3,453` over 6 OOS seasons at `CLV +0.68%`):
 
 ```text
   [ Past Pinnacle 1X2 + O2.5 + AHh (t' < t) ]     [ Opta/FotMob Shot-Level npxG + xGOT (t' < t) ]
@@ -56,7 +56,8 @@ DeepPitch **v2.1** replaces the legacy single-MLP architecture (`v1`, blind test
                                 │
                                 ▼
              [ 11-Book ADM Best-Odds Line Shopping + Quarter-Kelly Sizing ]
-             • Band: EV ∈ [2.5%, 6.0%) | Odds ∈ (1.35, 6.00) | Hard Cap: 3.0%
+             • Track 1 (1X2)     : EV ∈ [2.5%, 6.0%) | Odds ∈ (1.35, 6.00) | Hard Cap: 3.0%
+             • Track 2 (O/U 2.5) : EV ∈ [2.5%, 8.0%) | Odds ∈ (1.35, 6.00) | Hard Cap: 3.0%
              • Auto-Audit & CLV Tracking (data/v2_scan_audit.csv + tracking_2026_2027.csv)
                                 │
                                 ▼
@@ -134,6 +135,26 @@ Why **`EV ∈ [2.5%, 6.0%)`**? Empirical diagnostics across `9,768` OOS matches 
   <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2.1 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
 </p>
 
+### 4. Dual-Market Expansion: Over / Under 2.5 Goals (`v2.2`, `EV ∈ [2.5%, 8.0%)`)
+
+Using the exact same pre-match $(\lambda_H, \lambda_A)$ from the Adaptive Riccati Dual-Gain Kalman + Dixon-Coles matrix (`rho = -0.065`) calibrated via a 2-parameter OOF Platt layer (`a = 1.085, b = +0.037`), DeepPitch `v2.2` prices **Over / Under 2.5 Goals** across all 11 Italian ADM bookmakers. Because single-player lineup shocks move match-winner (`1X2`) odds far more than total goal expectations, adverse selection in the `6%–8%` EV band is dramatically lower on totals:
+
+| Over/Under 2.5 Benchmark (Zero Current-Match Odds) | OOF `2019–2024` (`n=8,817`) | Blind Test `2024/25` (`n=1,697`) |
+| :--- | :---: | :---: |
+| **DeepPitch `v2.2` Calibrated O/U 2.5** 🏆 | **`0.23865`** *(LL `0.66993`)* | **`0.23901`** *(LL `0.67084`)* |
+| **Bookmaker Consensus Avg (De-Vig)** | `0.23883` *(LL `0.67034`)* | `0.23898` *(LL `0.67069`)* |
+| **Pinnacle Opening O/U 2.5 (De-Vig)** | `0.23875` *(LL `0.67017`)* | `0.23877` *(LL `0.67023`)* |
+| **Pinnacle Closing O/U 2.5 (Gold Standard)** | `0.23765` *(LL `0.66786`)* | `0.23701` *(LL `0.66662`)* |
+
+**6-Season Out-of-Sample Economic Results (`Over/Under 2.5`, Quarter-Kelly `3.0%` Cap, `Start €1,000`):**
+* **Best-Book `MaxO25/U25`, `EV ∈ [2.5%, 8.0%)` (6 Seasons `2019–2025`, `4,113` bets):** **`€1,000 → €3,452.73`** (`54.0%` WR, `+2.14%` Kelly ROI, `+2.21%` Flat Yield, `34.8%` Max DD, **`CLV = +0.68%`**).
+* **Blind Season `2024/25` (`EV ∈ [2.5%, 8.0%)`, `604` bets):** **`€1,000 → €1,355.97`** (`55.3%` WR, `+3.40%` ROI, `+3.85%` Flat Yield); on `EV ∈ [2.5%, 6.0%)` (`473` bets): **`€1,210.06`** (`56.2%` WR, `+5.27%` Flat Yield, **`15.2%` Max DD**).
+* **Stress Test vs Pinnacle Open O/U (`EV ∈ [1.5%, 6.0%)`, `3,070` bets):** breaks even (`€994.86`, `+0.46%` Flat Yield; Blind `2024/25`: `€1,121.47` on `EV ∈ [2.5%, 8.0%)`).
+
+<p align="center">
+  <img src="docs/charts/05_ou25_goals_benchmark.png" alt="DeepPitch v2.2 Over/Under 2.5 Quarter-Kelly Equity and Brier Benchmark" width="98%" />
+</p>
+
 ---
 
 ## Mathematical & Statistical Methodology
@@ -167,7 +188,7 @@ Long-term absences are already priced into past market lines. `src/injury_lineup
 ### 5. Shin (1993) De-Vigging, 11-Book ADM Line Shopping & Fractional Kelly Sizing
 * **Shin De-Vigging:** Accounts for favorite-longshot bias by solving numerically for the informed-trading parameter $z \in [0, 1)$ such that $\sum_c p_c(z) = 1$.
 * **ADM Best-Odds Execution:** Queries BetExplorer's live AJAX bookmaker feed across 11 active Italian ADM bookmakers (`888sport`, `bet365`, `bwin.it`, `Eurobet.it`, `GoldBet`, `Lottomatica`, `Netwin`, `Planetwin365`, `Sisal`, `SNAI`, `William Hill`), cutting effective execution overround from `~6.5%` average down to `~3.6–4.4%`.
-* **Quarter-Kelly Capital Allocation (`v2.1`, `EV ∈ [2.5%, 6.0%)`):**
+* **Quarter-Kelly Capital Allocation (`v2.2`, `1X2: EV ∈ [2.5%, 6.0%)` | `O/U 2.5: EV ∈ [2.5%, 8.0%)`):**
   $$f^* = \frac{p \cdot q - 1}{q - 1}, \qquad \text{Stake Fraction} = \min\!\left(0.25 \cdot f^*, \; 0.030\right)$$
 
 ---
@@ -201,19 +222,19 @@ While DeepPitch v2.1 handles pre-match pricing and selection, open positions are
 
 ```text
 ├── src/
-│   ├── train_v2.py             # DeepPitch v2.1 training & 5-fold expanding OOF calibration -> bundle export
+│   ├── train_v2.py             # DeepPitch v2.2 training (1X2 + O/U 2.5 Platt) & OOF calibration -> bundle export
 │   ├── v2_state_engine.py      # Live auto-sync football-data + FotMob npxG + Adaptive Riccati Dual-Gain Kalman
 │   ├── injury_lineup.py        # Live FotMob fresh-injury, suspension, rotation delta & trap guard
-│   ├── predict_v2.py           # 5-Head Residual-Offset v2.1 inference engine
-│   ├── scanner.py              # Unified pre-match Top-5 scanner (v2.1 default, 11-book ADM best-odds, Telegram, CLV audit)
-│   ├── decision_engine.py      # EV band [2.5%, 6.0%) qualification & Quarter-Kelly sizing (3% cap)
+│   ├── predict_v2.py           # 5-Head Residual-Offset v2.2 inference engine (1X2 + Over/Under 2.5)
+│   ├── scanner.py              # Unified Dual-Market Top-5 scanner (1X2 + O/U 2.5 on 11 ADM books, Telegram, CLV)
+│   ├── decision_engine.py      # Dual EV bands (1X2 [2.5%, 6%), O/U 2.5 [2.5%, 8%)) & Quarter-Kelly sizing (3% cap)
 │   ├── elo_fetcher.py          # Live ClubElo scraper with 12h local cache
-│   ├── settle_matches.py       # Automated match settlement & bankroll ledger updater
+│   ├── settle_matches.py       # Automated match settlement (1X2 + Over/Under 2.5) & bankroll ledger updater
 │   ├── feature_builder.py      # Legacy v1 56-feature deterministic builder
 │   ├── predict.py              # Legacy v1 inference + Shin (1993) de-vigging utility
 │   └── train_and_export.py     # Legacy v1 PyTorch training script
 ├── models/
-│   ├── deep_pitch_v2_bundle.pkl # Production DeepPitch v2.1 serialized 5-head ensemble & scalers
+│   ├── deep_pitch_v2_bundle.pkl # Production DeepPitch v2.2 serialized 5-head ensemble + O/U 2.5 calibrator
 │   └── modello_calcio_v1.pt     # Legacy v1 checkpoint
 ├── backtest/
 │   ├── backtest.cpp            # Native C++20 backtester & 10,000-run dual Monte Carlo stress tester
@@ -237,7 +258,7 @@ While DeepPitch v2.1 handles pre-match pricing and selection, open positions are
 pip install -r requirements.txt
 ```
 
-### 2. Run the Pre-Match Top-5 Scanner (DeepPitch v2.1)
+### 2. Run the Pre-Match Dual-Market Top-5 Scanner (DeepPitch v2.2)
 ```bash
 # Dry-run scan across E0, I1, SP1, D1, F1 (v2 engine + live injuries + 11-book ADM best-odds)
 python src/scanner.py
