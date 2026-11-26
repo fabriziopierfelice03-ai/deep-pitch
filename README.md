@@ -7,7 +7,7 @@
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![C++20 Engine](https://img.shields.io/badge/Live%20Sentinel-C%2B%2B20-00599C?style=flat-square&logo=cplusplus&logoColor=white)](#autonomous-in-play-risk-sentinel-c20-bellman-rl-engine)
 [![Blind 1X2 Brier](https://img.shields.io/badge/Blind%2024%2F25%201X2%20Brier-0.57279-2ea043?style=flat-square)](#1-probabilistic-accuracy-brier-score--strictly-zero-current-match-odds-leakage)
-[![O/U 2.5 OOF Brier](https://img.shields.io/badge/O%2FU%202.5%20OOF%20Brier-0.23865%20%3C%20PinOpen-2ea043?style=flat-square)](#4-dual-market-expansion-over--under-25-goals-v22)
+[![O/U 2.5 OOF Brier](https://img.shields.io/badge/O%2FU%202.5%20OOF%20Brier-0.23865%20%3C%20PinOpen-2ea043?style=flat-square)](#4-dual-market-expansion-over--under-25-goals)
 [![Tests](https://img.shields.io/badge/Pytest%20%2B%20C%2B%2B20%20Tests-21%2F21%20Passing-2ea043?style=flat-square)](#3-run-the-full-test-suite)
 
 *Zero-leakage dual-market (`1X2` + `Over/Under 2.5`) statistical inference & 11-book ADM line shopping across Europe's Top-5 football leagues (`E0`, `I1`, `SP1`, `D1`, `F1`), coupled with a private 1Hz C++20 Model-Based Reinforcement Learning execution daemon.*
@@ -18,7 +18,7 @@
 
 ## Executive Summary & Architecture
 
-DeepPitch **v2.2** upgrades the `v2.1` **Adaptive Riccati Dual-Gain Kalman** (`1X2` Blind Test Brier **`0.57279`**, `Log-Loss = 0.96313`, statistically significant `p = 0.035` over `9,768` OOS matches, **beating Pinnacle Opening odds in the Premier League at `0.56513` vs `0.56565`**) with a full **Track 2: Over / Under 2.5 Goals** pricing & ADM line-shopping engine derived directly from the exact same latent $(\lambda_H, \lambda_A)$ Dixon-Coles matrix (`OOF Brier = 0.23865` across `8,817` matches — **below Pinnacle Opening `0.23875` without seeing current-match odds**, compounding `€1,000 → €3,453` over 6 OOS seasons at `CLV +0.68%`):
+DeepPitch **v2.2** upgrades the legacy `v1` MLP (`0.58463`) and `v2.0` (`0.57365`) with an **Adaptive Riccati Dual-Gain Kalman** (`1X2` Blind Test Brier **`0.57279`**, `Log-Loss = 0.96313`, statistically significant `p = 0.035` over `9,768` OOS matches, **beating Pinnacle Opening odds in the Premier League at `0.56513` vs `0.56565`**) plus a full **Track 2: Over / Under 2.5 Goals** pricing & ADM line-shopping engine derived directly from the exact same latent $(\lambda_H, \lambda_A)$ Dixon-Coles matrix (`OOF Brier = 0.23865` across `8,817` matches — **below Pinnacle Opening `0.23875` without seeing current-match odds**, compounding `€1,000 → €3,453` over 6 OOS seasons at `CLV +0.68%`):
 
 ```text
   [ Past Pinnacle 1X2 + O2.5 + AHh (t' < t) ]     [ Opta/FotMob Shot-Level npxG + xGOT (t' < t) ]
@@ -72,7 +72,7 @@ DeepPitch **v2.2** upgrades the `v2.1` **Adaptive Riccati Dual-Gain Kalman** (`1
 
 ### 1. Probabilistic Accuracy (Brier Score — Strictly Zero Current-Match Odds Leakage)
 
-Evaluated on the exact **16,268 Top-5 historical dataset** (`2015–2025`) using **5-Fold Expanding-Window Out-of-Fold CV** (`8,140` OOF matches from `2019–2024`) with the `2024/25` season (`1,627` matches) held 100% blind, plus a brand-new blind evaluation on the live **`2026/27` season** (`Aug–Nov 2026`):
+Evaluated on the exact **16,268 Top-5 historical dataset** (`2015–2025`) using **5-Fold Expanding-Window Out-of-Fold CV** (`8,141` OOF matches from `2019–2024`) with the `2024/25` season (`1,627` matches) held 100% blind, plus a brand-new blind evaluation on the live **`2026/27` season** (`Aug–Nov 2026`):
 
 | Model / Benchmark | Val `2023/24` (n=1,627) | Blind Test `2024/25` (n=1,627) | Delta vs `v1` (Test) |
 | :--- | :---: | :---: | :---: |
@@ -80,21 +80,21 @@ Evaluated on the exact **16,268 Top-5 historical dataset** (`2015–2025`) using
 | **Block #1 + #2** (Multi-scale EWMA + Opta `npxG/xGOT` + DC, *no past market*) | `0.57547` | `0.57985` | `-0.00478` |
 | **Generative Base (`v2.0`)** (62% Past-Market + 26% Exact Opta `npxG` DC + 11% Exact 35d Mkt) | `0.57432` | `0.57472` | `-0.00991` |
 | **DeepPitch `v2.0` Production 5-Head Ensemble** | `0.57307` | `0.57365` | `-0.01098` |
-| **Generative Base (`v2.1`)** (79% Adaptive Riccati Dual-Gain Kalman + 14% ExMkt35 + 8% DC120) | `0.57355` | `0.57348` | `-0.01115` |
-| **DeepPitch `v2.1` Production 5-Head Ensemble** 🏆 | **`0.57252`** | **`0.57279`** | **`-0.01184`** |
-| **DeepPitch `v2.1` Best Single Head (`Offset_Linear`)** | **`0.57245`** | **`0.57243`** | **`-0.01220`** |
+| **Generative Base (`v2.2`)** (79% Adaptive Riccati Dual-Gain Kalman + 14% ExMkt35 + 8% DC120) | `0.57355` | `0.57348` | `-0.01115` |
+| **DeepPitch `v2.2` Production 5-Head Ensemble** 🏆 | **`0.57252`** | **`0.57279`** | **`-0.01184`** |
+| **DeepPitch `v2.2` Best Single Head (`Offset_Linear`)** | **`0.57245`** | **`0.57243`** | **`-0.01220`** |
 | **Bookmaker Consensus Avg (Shin De-Vig)** | `0.57193` | `0.56945` | *Market Benchmark* |
 | **Pinnacle Opening Odds (Shin De-Vig)** | `0.57177` | `0.56921` | *Sharp Open Benchmark* |
 | **Pinnacle Closing Odds (Shin De-Vig)** | `0.56965` | `0.56684` | *Gold Standard* |
 | **Pinnacle Open + `v2` Orthogonal Residuals (`npxG/xGOT/steam/rest`)** | — | **`0.56908`** | **`-0.00013` below Pinnacle Open** |
 
-**League-by-League Breakdown on Blind Test `2024/25` (`v2.1` vs `v2.0` and Pinnacle Open):**
+**League-by-League Breakdown on Blind Test `2024/25` (`v2.2` vs `v2.0` and Pinnacle Open):**
 * **Premier League (`E0`, n=339):** `0.56587 →` **`0.56513`** (`-0.00074`, **beats Pinnacle Open `0.56565` & BookAvg `0.56582`!**)
 * **Serie A (`I1`, n=358):** `0.57191 →` **`0.57171`** (`-0.00020`, vs PinOpen `0.56904`)
 * **La Liga (`SP1`, n=394):** `0.56968 →` **`0.56926`** (`-0.00042`, vs PinOpen `0.56154`)
 * **Bundesliga (`D1`, n=234):** `0.60391 →` **`0.60048`** (`-0.00343`, vs PinOpen `0.59408`)
 * **Ligue 1 (`F1`, n=302):** `0.56749 →` **`0.56693`** (`-0.00056`, vs PinOpen `0.56414`)
-* **All 6 Seasons OOS (`9,768` matches `2019–2025`):** `v2.1` improves over `v2.0` by `-0.00045` Brier (`z = -2.11`, `p = 0.035`), nearly doubling realized CLV vs Pinnacle Close (`+0.30% → +0.61%` on `MaxOdds`, `EV ∈ [2.5%, 6.0%)`: `+3.47%` ROI, `€1,000 → €2,214`).
+* **All 6 Seasons OOS (`9,768` matches `2019–2025`):** `v2.2` improves over `v2.0` by `-0.00045` Brier (`z = -2.11`, `p = 0.035`), nearly doubling realized CLV vs Pinnacle Close (`+0.30% → +0.61%` on `MaxOdds`, `EV ∈ [2.5%, 6.0%)`: `+3.47%` ROI, `€1,000 → €2,214`).
 
 <p align="center">
   <img src="docs/charts/01_brier_ablation.png" alt="DeepPitch v2.2 Out-of-Sample Brier Progression" width="94%" />
@@ -118,11 +118,11 @@ Tested strictly out-of-sample on `136` completed `2026/27` Top-5 matches with pr
 | **`v2` WITH Fresh Injuries + TrapGuard** | **`0.55265`** (`-0.00104`) | **`0.54332`** (`-0.00171`) | `36` bets (`2` traps blocked) \| **`50.0%` WR** \| `+4.71u` | `36` bets (`3` traps blocked) \| **`58.3%` WR** \| **`+16.76u`** |
 | **Bookmaker Consensus Avg (Shin)** | `0.55060` | `0.53928` | — | — |
 
-### 3. Six-Season Out-of-Sample Economic Evaluation (`v2.1`, `2019–2025`, `EV ∈ [2.5%, 6.0%)`)
+### 3. Six-Season Out-of-Sample Economic Evaluation (`v2.2` `1X2`, `2019–2025`, `EV ∈ [2.5%, 6.0%)`)
 
 Why **`EV ∈ [2.5%, 6.0%)`**? Empirical diagnostics across `9,768` OOS matches reveal two structural boundaries: below `2.5%` vig-noise dilutes realized edge, while above **`6.0%`** classic **stale-price adverse selection** dominates (`-2.2%` flat yield in `6–9%`, `-5.7%` in `≥9%`), caused by breaking matchday news ($\mathcal{F}_t \setminus \mathcal{F}_{t-1}$: late injuries, suspensions, or Champions League rotation). Filtering to **`EV ∈ [2.5%, 6.0%)`** with **Quarter-Kelly (`3.0%` cap)** — combined with the live FotMob injury guard — produces **6 consecutive profitable full seasons** on best-available market odds (`World Max`):
 
-| Season (OOS, `v2.1` @ Best-Odds `MaxOdds`, `EV ∈ [2.5%, 6.0%)`) | Bets | Win Rate | Flat PnL | Flat Yield | Q-Kelly (€1k start) | CLV vs PinClose |
+| Season (OOS, `v2.2` @ Best-Odds `MaxOdds`, `EV ∈ [2.5%, 6.0%)`) | Bets | Win Rate | Flat PnL | Flat Yield | Q-Kelly (€1k start) | CLV vs PinClose |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | `2019/20` (OOF Fold 1) | 400 | 39.8% | `+15.90u` | `+3.98%` | `€1,217.93` (`+6.44%`) | `+0.02%` |
 | `2020/21` (OOF Fold 2 — *COVID empty stadiums*) | 593 | 37.1% | `-3.45u` | `-0.58%` | `€1,056.71` (`+1.18%`) | `+0.64%` |
@@ -139,9 +139,9 @@ Why **`EV ∈ [2.5%, 6.0%)`**? Empirical diagnostics across `9,768` OOS matches 
   <img src="docs/charts/03_oos_equity_and_ev_band.png" alt="DeepPitch v2.2 6-Season OOS Quarter-Kelly Equity and Adverse Selection EV Band" width="98%" />
 </p>
 
-### 4. Dual-Market Expansion: Over / Under 2.5 Goals (`v2.2`, `EV ∈ [2.5%, 8.0%)`)
+### 4. Dual-Market Expansion: Over / Under 2.5 Goals
 
-Using the exact same pre-match $(\lambda_H, \lambda_A)$ from the Adaptive Riccati Dual-Gain Kalman + Dixon-Coles matrix (`rho = -0.065`) calibrated via a 2-parameter OOF Platt layer (`a = 1.085, b = +0.037`), DeepPitch `v2.2` prices **Over / Under 2.5 Goals** across all 11 Italian ADM bookmakers. Because single-player lineup shocks move match-winner (`1X2`) odds far more than total goal expectations, adverse selection in the `6%–8%` EV band is dramatically lower on totals:
+Using the exact same pre-match $(\lambda_H, \lambda_A)$ from the Adaptive Riccati Dual-Gain Kalman + Dixon-Coles matrix (`rho = -0.065`) calibrated via a 2-parameter OOF Platt layer (`a = 1.085, b = +0.037`), DeepPitch **`v2.2`** prices **Over / Under 2.5 Goals** (`EV ∈ [2.5%, 8.0%)`, Quarter-Kelly `3.0%` cap) across all 11 Italian ADM bookmakers. Because single-player lineup shocks move match-winner (`1X2`) odds far more than total goal expectations, adverse selection in the `6%–8%` EV band is dramatically lower on totals:
 
 | Over/Under 2.5 Benchmark (Zero Current-Match Odds) | OOF `2019–2024` (`n=8,817`) | Blind Test `2024/25` (`n=1,697`) |
 | :--- | :---: | :---: |
@@ -164,55 +164,64 @@ Using the exact same pre-match $(\lambda_H, \lambda_A)$ from the Adaptive Riccat
 ## Mathematical & Statistical Methodology
 
 ### 1. Exact Rolling Weighted Poisson-MLE Dixon-Coles (`npxG` & `xGOT`)
-Raw rolling averages fail to adjust for opponent strength and suffer from penalty variance (`~0.77 xG` noise per penalty). DeepPitch v2.1 solves a time-decayed Ridge-regularized Poisson MLE via **Newton-Raphson (IRLS)** strictly on past matches ($t_k < t$, half-life $\tau = 120$ days):
+Raw rolling averages fail to adjust for opponent strength and suffer from penalty variance (`~0.77 xG` noise per penalty). DeepPitch `v2.2` solves a time-decayed Ridge-regularized Poisson MLE via **Newton-Raphson (IRLS)** strictly on past matches ($t_k < t$, half-life $\tau = 120$ days):
 
-$$\lambda_H = \exp\!\left(\mu + \tfrac{1}{2}\text{HFA} + a_H - d_A\right), \qquad \lambda_A = \exp\!\left(\mu - \tfrac{1}{2}\text{HFA} + a_A - d_H\right)$$
+$$
+\lambda_H = \exp\left(\mu + \frac{1}{2}\mathrm{HFA} + a_H - d_A\right), \qquad \lambda_A = \exp\left(\mu - \frac{1}{2}\mathrm{HFA} + a_A - d_H\right)
+$$
 
-with exponential decay weights $w_k = 2^{-(t - t_k)/\tau}$ and **Dixon-Coles (1997)** low-score correlation adjustment $\tau_\rho(x,y)$ ($\rho = -0.065$) on $(0,0), (1,0), (0,1), (1,1)$.
+with exponential decay weights $w_k = 2^{-(t - t_k)/\tau}$ and **Dixon-Coles (1997)** low-score correlation adjustment $\tau_\rho(x,y)$ ($\rho = -0.065$) on $(0,0)$, $(1,0)$, $(0,1)$, and $(1,1)$.
 
-### 2. Adaptive Riccati Dual-Gain Kalman (`v2.1`, Zero Current-Match Leakage)
-For every **completed** past fixture $t' < t$, DeepPitch `v2.1` analytically inverts Pinnacle's historical `1X2`, `Over/Under 2.5`, and `Asian Handicap` lines into implied expected goals $(\lambda_{\text{mkt},H}, \lambda_{\text{mkt},A})$ and updates each team's latent attack/defense state via an **asymmetric scalar Riccati Kalman filter** coupled with a real match `npxG` reality check:
-1. **Dynamic State Variance ($P_{\text{att}}, P_{\text{def}}$):** Newly promoted teams start at high uncertainty ($P_0 = 1.50 \Rightarrow K \approx 0.54$), veterans receive an off-season variance boost ($Q_{\text{summer}} = 0.50 \Rightarrow K \approx 0.30$ on Matchday 1), and gains converge automatically to $K \approx 0.21$ in steady state — assigning surprise credit asymmetrically to the less-certain team.
-2. **Dual-Sensor Innovation:** Anchors to Pinnacle's low-noise log-$\lambda$ (`K_pin`) while adding a gentle, low-noise `100% npxG` physical shock (`0.12 * K_pin * (1.06 * npxG - lam_pred)`), capturing on-pitch over/under-performance measured against a Pinnacle-calibrated opponent before the market fully reprices it the following week.
+### 2. Adaptive Riccati Dual-Gain Kalman (`v2.2`, Zero Current-Match Leakage)
+For every **completed** past fixture $t' < t$, DeepPitch `v2.2` analytically inverts Pinnacle's historical `1X2`, `Over/Under 2.5`, and `Asian Handicap` lines into implied expected goals $(\lambda_{\mathrm{mkt},H}, \lambda_{\mathrm{mkt},A})$ and updates each team's latent attack/defense state via an **asymmetric scalar Riccati Kalman filter** coupled with a real match `npxG` reality check:
+
+1. **Dynamic State Variance** (`P_att`, `P_def`): Newly promoted teams start at high uncertainty ($P_0 = 1.50 \Rightarrow K \approx 0.54$), veterans receive an off-season variance boost ($Q_{\mathrm{summer}} = 0.50 \Rightarrow K \approx 0.30$ on Matchday 1), and gains converge automatically to $K \approx 0.21$ in steady state — assigning surprise credit asymmetrically to the less-certain team.
+2. **Dual-Sensor Innovation:** Anchors to Pinnacle's low-noise $\log \lambda$ (`K_pin`) while adding a gentle, low-noise `100% npxG` physical shock (`0.12 * K_pin * (1.06 * npxG - lam_pred)`), capturing on-pitch over/under-performance measured against a Pinnacle-calibrated opponent before the market fully reprices it the following week.
 3. Paired with an exact 35-day exponentially-weighted Ridge solver (`ExMkt35`) and an exact 120-day Opta `npxG` Dixon-Coles solver (`DC120`).
 
 ### 3. Residual-Offset Learning & Grouped-Ridge Regularization
-In low-SNR domains like football, feeding 100+ raw features into tree/neural models induces variance explosion. Instead, all ML heads initialize from the calibrated generative base logits $z_{\text{base}} = \log(p_{\text{base}})$ (`init_score` in LightGBM, `base_margin` in XGBoost, additive skip in PyTorch/Linear) and learn strictly regularized residual corrections:
+In low-SNR domains like football, feeding 100+ raw features into tree/neural models induces variance explosion. Instead, all ML heads initialize from the calibrated generative base logits $z_{\mathrm{base}} = \log(p_{\mathrm{base}})$ (`init_score` in LightGBM, `base_margin` in XGBoost, additive skip in PyTorch/Linear) and learn strictly regularized residual corrections:
 
-$$z_{\text{final}} = \alpha \cdot \log(p_{\text{base}}) + b + f_\theta(x_{\text{mot}}, x_{\text{res}})$$
+$$
+z_{\mathrm{final}} = \alpha \cdot \log(p_{\mathrm{base}}) + b + f_\theta(x_{\mathrm{mot}}, x_{\mathrm{res}})
+$$
 
-In `Offset_Linear`, two distinct L2 penalties prevent over-shrinking sparse high-impact end-of-season motivation signals (`ex_champ_diff`, `ex_locked_diff`, `ex_drel_diff`, `ex_off_diff` with $\lambda_{\text{mot}} = 100$) while heavily shrinking noisy all-season residuals ($\lambda_{\text{res}} = 7000$).
+In `Offset_Linear`, two distinct L2 penalties prevent over-shrinking sparse high-impact end-of-season motivation signals (`ex_champ_diff`, `ex_locked_diff`, `ex_drel_diff`, `ex_off_diff` with $\lambda_{\mathrm{mot}} = 100$) while heavily shrinking noisy all-season residuals ($\lambda_{\mathrm{res}} = 7000$).
 
-### 4. Live FotMob Fresh-Injury & Lineup Delta ($\mathcal{F}_t \setminus \mathcal{F}_{t-1}$)
-Long-term absences are already priced into past market lines. `src/injury_lineup.py` cross-references FotMob's pre-match `unavailable` list and `predicted`/`confirmed` XI against each team's **last 5 completed starting XIs** (already cached locally):
-* Isolates **freshly missing regular starters** (started $\ge 2$ of last 5 matches and now injured, suspended, doubtful, or rotated out).
+### 4. Live FotMob Fresh-Injury & Lineup Delta
+Long-term absences are already priced into past market lines. To capture breaking pre-match information ($\mathcal{F}_t \setminus \mathcal{F}_{t-1}$), `src/injury_lineup.py` cross-references FotMob's pre-match `unavailable` list and `predicted`/`confirmed` XI against each team's **last 5 completed starting XIs** (already cached locally):
+
+* Isolates **freshly missing regular starters** (started ≥ 2 of last 5 matches and now injured, suspended, doubtful, or rotated out).
 * Applies a bounded, conservative logit adjustment (`±0.16` max) weighted by missing XI market value and starter count.
-* Triggers a hard **Adverse-Selection Trap Guard** whenever a candidate pick backs a team freshly missing $\ge 2$ regular starters or $\ge 18\%$ of starting XI market value.
+* Triggers a hard **Adverse-Selection Trap Guard** whenever a candidate pick backs a team freshly missing ≥ 2 regular starters or ≥ 18% of starting XI market value.
 
 ### 5. Shin (1993) De-Vigging, 11-Book ADM Line Shopping & Fractional Kelly Sizing
 * **Shin De-Vigging:** Accounts for favorite-longshot bias by solving numerically for the informed-trading parameter $z \in [0, 1)$ such that $\sum_c p_c(z) = 1$.
-* **ADM Best-Odds Execution:** Queries BetExplorer's live AJAX bookmaker feed across 11 active Italian ADM bookmakers (`888sport`, `bet365`, `bwin.it`, `Eurobet.it`, `GoldBet`, `Lottomatica`, `Netwin`, `Planetwin365`, `Sisal`, `SNAI`, `William Hill`), cutting effective execution overround from `~6.5%` average down to `~3.6–4.4%`.
-* **Quarter-Kelly Capital Allocation (`v2.2`, `1X2: EV ∈ [2.5%, 6.0%)` | `O/U 2.5: EV ∈ [2.5%, 8.0%)`):**
-  $$f^* = \frac{p \cdot q - 1}{q - 1}, \qquad \text{Stake Fraction} = \min\!\left(0.25 \cdot f^*, \; 0.030\right)$$
+* **ADM Best-Odds Execution:** Queries BetExplorer's live AJAX bookmaker feed across 11 active Italian ADM bookmakers (`888sport`, `bet365`, `bwin.it`, `Eurobet.it`, `GoldBet`, `Lottomatica`, `Netwin`, `Planetwin365`, `Sisal`, `SNAI`, `William Hill`), cutting effective execution overround from `~6.5%` average down to `~3.2–4.4%`.
+* **Quarter-Kelly Capital Allocation** (`v2.2`, `1X2: EV ∈ [2.5%, 6.0%)` | `O/U 2.5: EV ∈ [2.5%, 8.0%)`):
+
+$$
+f^* = \frac{p \cdot q - 1}{q - 1}, \qquad \text{Stake Fraction} = \min\left(0.25 \cdot f^*, \quad 0.030\right)
+$$
 
 ---
 
 ## Autonomous In-Play Risk Sentinel (C++20 Bellman RL Engine)
 
-While DeepPitch v2.1 handles pre-match pricing and selection, open positions are managed in real time by **Live Sentinel**, a decoupled private **C++20** daemon (`live-sentinel`) running at **1Hz** on a Linux VPS (~1.5 MB RAM, ~0.25 ms/tick):
+While DeepPitch `v2.2` handles pre-match pricing and selection, open positions are managed in real time by **Live Sentinel**, a decoupled private **C++20** daemon (`live-sentinel`) running at **1Hz** on a Linux VPS (~1.5 MB RAM, ~0.25 ms/tick):
 
-* **Model-Based Multi-Step Reinforcement Learning (Bellman Backward Induction):** Solves the exact finite-horizon Bellman equation backward from $t = 94' \to t_{\text{now}}$ over an empirical non-homogeneous Poisson goal-intensity world model calibrated on **21,605 real Top-5 Opta matches (2014–2026)**, coupled with a real-time **Pressure Index (`PI`)** regime Markov chain, live odds velocity $V$, ClubElo differential, and Martingale-consistent no-arbitrage future bookmaker pricing.
-* **CRRA Dynamic Fractional Kelly Objective ($\gamma = 4.0$):** Maximizes bankroll-normalized CRRA Certainty Equivalent utility (using full 15-digit IEEE-754 `log1p`/`expm1` precision, automatically synced to live bankroll from `tracking_2026_2027.csv`), choosing dynamically among `{HOLD, FREEBET, PARTIAL_HEDGE_50, FULL_GREENBOOK, FREEZE}` with cumulative multi-step leg accounting (`CumulativeHedgeBook`).
+* **Model-Based Multi-Step Reinforcement Learning (Bellman Backward Induction):** Solves the exact finite-horizon Bellman equation backward from `t = 94'` to `t_now` over an empirical non-homogeneous Poisson goal-intensity world model calibrated on **21,605 real Top-5 Opta matches (2014–2026)**, coupled with a real-time **Pressure Index (`PI`)** regime Markov chain, live odds velocity `V`, ClubElo differential, and Martingale-consistent no-arbitrage future bookmaker pricing.
+* **CRRA Dynamic Fractional Kelly Objective (`γ = 4.0`):** Maximizes bankroll-normalized CRRA Certainty Equivalent utility (using full 15-digit IEEE-754 `log1p`/`expm1` precision, automatically synced to live bankroll from `tracking_2026_2027.csv`), choosing dynamically among `{HOLD, FREEBET, PARTIAL_HEDGE_50, FULL_GREENBOOK, FREEZE}` with cumulative multi-step leg accounting (`CumulativeHedgeBook`).
 * **Universal Live Tick Recorder:** Logs every live Kambi football match to daily CSV snapshots (`data/live_ticks/`) for future Offline RL calibration on real in-play spreads.
 * **Atomic Sync:** Synchronizes settled multi-step hedges to `tracking_2026_2027.csv`, commits audit logs, and dispatches Telegram execution receipts.
 
 **Out-of-Sample In-Play Benchmark (`5,253` real Top-5 Opta matches 2023–2026; `2,663` leading episodes, `7.5%` asymmetric live vig):**
 
-| Scenario & Policy | Net PnL (€) | StdDev (€) | CRRA CE ($\gamma=4$) | Max DD | Comebacks Saved |
+| Scenario & Policy | Net PnL (€) | StdDev (€) | CRRA CE (γ = 4) | Max DD | Comebacks Saved |
 | :--- | ---: | ---: | ---: | :---: | :---: |
 | **A. Realistic Kambi** *(7.5% vig, 2m lag, 2% @ 2.65)* — Pure Hold | 47,811 | 23.90 | 44,710 | 11.4% | 0 / 756 |
 | A. Legacy Microstructure (All-or-Nothing) | 48,051 | 23.31 | 45,099 | 11.0% | 37 / 756 |
-| **A. Bellman Multi-Step RL ($\gamma = 4.0$)** | **49,137** | **18.69** | **47,242** | **7.8%** | **352 / 756** |
+| **A. Bellman Multi-Step RL (γ = 4.0)** | **49,137** | **18.69** | **47,242** | **7.8%** | **352 / 756** |
 | **B. Zero-Edge Stress Test** *(7.5% vig, 0m lag)* — Legacy vs **Bellman RL** | 47,712 vs **47,839** | 22.59 vs **21.19** | 44,940 vs **45,400** | 11.0% vs **11.0%** | 78 vs **173 / 756** |
 | **C. High-Odds Underdog** *(3.50 odds, 7.0% vig)* — Hold vs **Bellman RL** | 140,402 vs **138,890** | 55.23 vs **24.73** | 123,648 vs **135,657** | 19.2% vs **3.5%** | 0 vs **727 / 756** |
 
