@@ -27,7 +27,9 @@ import os
 import sys
 import json
 import re
+import html
 import urllib.request
+import urllib.error
 import unicodedata
 import subprocess
 from datetime import datetime, timezone
@@ -176,12 +178,13 @@ def append_bets_to_tracking(qualified_bets: List[Dict[str, Any]], csv_path: str 
     return new_bets
 
 def git_commit_and_push(csv_path: str = TRACKING_CSV, count: int = 0) -> bool:
-    """Commits and pushes updated tracking CSV to GitHub origin main."""
+    """Commits and pushes updated tracking CSV to GitHub origin main (with rebase sync)."""
     repo_dir = os.path.dirname(os.path.abspath(csv_path))
     try:
         subprocess.run(["git", "-C", repo_dir, "add", "tracking_2026_2027.csv"], check=True)
         msg = f"scan: auto-added {count} new qualified picks for upcoming matchday"
         subprocess.run(["git", "-C", repo_dir, "commit", "-m", msg], check=True)
+        subprocess.run(["git", "-C", repo_dir, "pull", "--rebase", "--autostash", "origin", "main"], check=True)
         subprocess.run(["git", "-C", repo_dir, "push", "origin", "main"], check=True)
         print(f"[*] [GIT] Committato e sincronizzato con successo su GitHub: {msg}")
         return True
@@ -218,80 +221,121 @@ def get_telegram_credentials() -> Tuple[Optional[str], Optional[str]]:
                 pass
     return token, chat_id
 
+def _post_telegram_message(token: str, chat_id: str, text: str, parse_mode: Optional[str] = "HTML") -> bool:
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    body: Dict[str, Any] = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        body["parse_mode"] = parse_mode
+    payload = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError as e:
+        err_body = ""
+        try:
+            err_body = e.read().decode("utf-8", errors="ignore")
+        except Exception:
+            pass
+        print(f"[!] [TELEGRAM] Errore invio ({parse_mode}): HTTP {e.code} {err_body}")
+        return False
+    except Exception as e:
+        print(f"[!] [TELEGRAM] Errore invio ({parse_mode}): {e}")
+        return False
+
+
 def send_telegram_scan_digest(new_bets: List[Dict[str, Any]], bankroll: float, scan_summary: Dict[str, Any]) -> bool:
-    """Sends comprehensive Telegram notification of newly added pre-match picks."""
+    """Sends comprehensive Telegram notification (HTML-escaped & auto-chunked <= 3600 chars)."""
     token, chat_id = get_telegram_credentials()
     if not token or not chat_id:
         print("[!] [TELEGRAM] Token o Chat ID non trovati (notifica saltata).")
         return False
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
-    
-    eng_tag = str(scan_summary.get('engine', 'v2')).upper()
+
+    eng_tag = str(scan_summary.get("engine", "v2")).upper()
     if eng_tag == "V2":
         eng_display = "V2.2"
-        ev_rule = "1X2: EV ∈ [2.5%, 6.0%) | O/U 2.5: EV ∈ [2.5%, 8.0%)"
+        ev_rule = "1X2: EV 2.5%-6.0% | O/U 2.5: EV 2.5%-8.0%"
         kelly_label = "Quarter-Kelly"
     else:
         eng_display = eng_tag
-        ev_rule = "EV ≥ +5.0%"
+        ev_rule = "EV >= +5.0%"
         kelly_label = "Quarter-Kelly"
-    if not new_bets:
-        msg = (
-            f"🎯 *DEEP PITCH {eng_display} | SCANSIONE PRE-MATCH COMPLETATA*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📅 Scansione: *{now_str}*\n"
-            f"💰 Bankroll Attivo: *€{bankroll:.2f}*\n"
-            f"🔍 Match analizzati: *{scan_summary.get('evaluated_fixtures', 0)}* (Top 5 Leghe)\n"
-            f"🛡️ Trappole infortuni bloccate: *{scan_summary.get('traps_blocked', 0)}*\n"
-            f"ℹ️ *Nessuna nuova value bet identificata con {ev_rule}* per questo turno.\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🛡️ _Nessun rischio assunto. Capitale preservato al 100%._"
-        )
-    else:
-        msg_lines = [
-            f"🎯 *DEEP PITCH {eng_display} | NUOVE VALUE BET IDENTIFICATE*",
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"📅 Scansione: *{now_str}*",
-            f"💰 Bankroll Attivo: *€{bankroll:.2f}*",
-            f"🔍 Match analizzati: *{scan_summary.get('evaluated_fixtures', 0)}* (Top 5 Leghe)",
-            f"🛡️ Trappole infortuni bloccate: *{scan_summary.get('traps_blocked', 0)}*",
-            f"✨ Nuove selezioni qualificate ({ev_rule}): *{len(new_bets)}*\n"
-        ]
-        
-        for b in new_bets:
-            book_tag = f" [{b['best_bookmakers']}]" if b.get('best_bookmakers') else ""
-            inj_tag = f" | ⚠️ {b['injury_note']}" if b.get('injury_note') else ""
-            msg_lines.extend([
-                f"⚽ *{b['match_clean']}*",
-                f"• Lega: *{b['league']}* | Data: *{b['date_csv']}*",
-                f"• Segno: *{b['selection']}* @ *{b['bookmaker_odds']:.2f}*{book_tag} (Fair: {b['fair_odds']:.2f})",
-                f"• Prob. Modello: *{b['model_prob']:.1f}%* | EV: *+{b['ev_perc']:.2f}%*{inj_tag}",
-                f"• Stake {kelly_label}: *€{b['stake_eur']:.2f}* ({b['applied_fraction']:.2f}%)\n"
-            ])
-            
-        msg_lines.extend([
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"✅ _Aggiunte automaticamente su tracking_2026_2027.csv e sincronizzate su GitHub._",
-            f"🛡️ _Live Sentinel monitorera' le partite in tempo reale per la copertura Green Book._"
-        ])
-        msg = "\n".join(msg_lines)
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({
-        "chat_id": chat_id,
-        "text": msg,
-        "parse_mode": "Markdown"
-    }).encode("utf-8")
-    
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            print("[*] [TELEGRAM] Notifica inviata con successo sul tuo smartphone.")
-            return resp.status == 200
-    except Exception as e:
-        print(f"[!] [TELEGRAM] Errore invio messaggio: {e}")
-        return False
+    ev_rule_h = html.escape(ev_rule)
+    if not new_bets:
+        chunks = [
+            f"🎯 <b>DEEP PITCH {html.escape(eng_display)} | SCANSIONE PRE-MATCH COMPLETATA</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📅 Scansione: <b>{now_str}</b>\n"
+            f"💰 Bankroll Attivo: <b>€{bankroll:.2f}</b>\n"
+            f"🔍 Match analizzati: <b>{scan_summary.get('evaluated_fixtures', 0)}</b> (Top 5 Leghe)\n"
+            f"🛡️ Trappole infortuni bloccate: <b>{scan_summary.get('traps_blocked', 0)}</b>\n"
+            f"ℹ️ <b>Nessuna nuova value bet identificata ({ev_rule_h})</b> per questo turno.\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛡️ <i>Nessun rischio assunto. Capitale preservato al 100%.</i>"
+        ]
+    else:
+        header = (
+            f"🎯 <b>DEEP PITCH {html.escape(eng_display)} | NUOVE VALUE BET IDENTIFICATE</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📅 Scansione: <b>{now_str}</b>\n"
+            f"💰 Bankroll Attivo: <b>€{bankroll:.2f}</b>\n"
+            f"🔍 Match analizzati: <b>{scan_summary.get('evaluated_fixtures', 0)}</b> (Top 5 Leghe)\n"
+            f"🛡️ Trappole infortuni bloccate: <b>{scan_summary.get('traps_blocked', 0)}</b>\n"
+            f"✨ Nuove selezioni qualificate ({ev_rule_h}): <b>{len(new_bets)}</b>\n\n"
+        )
+        footer = (
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ <i>Aggiunte automaticamente su tracking_2026_2027.csv e sincronizzate su GitHub.</i>\n"
+            f"🛡️ <i>Live Sentinel monitorera' le partite in tempo reale per la copertura Green Book.</i>"
+        )
+
+        bet_blocks: List[str] = []
+        for b in new_bets:
+            m_clean = html.escape(str(b.get("match_clean", b.get("match", ""))))
+            l_clean = html.escape(str(b.get("league", "")))
+            d_clean = html.escape(str(b.get("date_csv", b.get("date", ""))))
+            s_clean = html.escape(str(b.get("selection", "")))
+            books_raw = str(b.get("best_bookmakers", "")).strip()
+            book_tag = f" [{html.escape(books_raw)}]" if books_raw else ""
+            inj_raw = str(b.get("injury_note", "")).strip()
+            inj_tag = f" | ⚠️ {html.escape(inj_raw)}" if inj_raw else ""
+            bet_blocks.append(
+                f"⚽ <b>{m_clean}</b>\n"
+                f"• Lega: <b>{l_clean}</b> | Data: <b>{d_clean}</b>\n"
+                f"• Segno: <b>{s_clean}</b> @ <b>{b['bookmaker_odds']:.2f}</b>{book_tag} (Fair: {b['fair_odds']:.2f})\n"
+                f"• Prob. Modello: <b>{b['model_prob']:.1f}%</b> | EV: <b>+{b['ev_perc']:.2f}%</b>{inj_tag}\n"
+                f"• Stake {kelly_label}: <b>€{b['stake_eur']:.2f}</b> ({b['applied_fraction']:.2f}%)\n\n"
+            )
+
+        chunks = []
+        curr = header
+        max_len = 3600
+        for blk in bet_blocks:
+            if len(curr) + len(blk) > max_len and curr != header:
+                chunks.append(curr.rstrip())
+                curr = f"🎯 <b>DEEP PITCH {html.escape(eng_display)} (continua)</b>\n\n" + blk
+            else:
+                curr += blk
+        if len(curr) + len(footer) > 3950:
+            chunks.append(curr.rstrip())
+            chunks.append(footer)
+        else:
+            chunks.append(curr + footer)
+
+    all_ok = True
+    for idx_c, ch in enumerate(chunks, 1):
+        ok = _post_telegram_message(token, chat_id, ch, parse_mode="HTML")
+        if not ok:
+            plain = re.sub(r"<[^>]+>", "", ch)
+            ok = _post_telegram_message(token, chat_id, plain, parse_mode=None)
+        if not ok:
+            all_ok = False
+    if all_ok:
+        print(f"[*] [TELEGRAM] Notifica inviata con successo ({len(chunks)} msg) sul tuo smartphone.")
+    return all_ok
 
 def fetch_json(url: str, timeout: int = 15) -> Optional[Dict[str, Any]]:
     req = urllib.request.Request(
@@ -344,6 +388,44 @@ def scrape_betexplorer_odds(url: str) -> Dict[str, Dict[str, Any]]:
         print(f"  [WARN] Impossibile scaricare quote da {url}: {e}")
     return odds_map
 
+# Strict whitelist of Italian ADM-licensed bookmakers (blocks offshore/Asian/crypto books
+# like 1xBet, Megapari, BetInAsia, Cloudbet, Duelbits, Betfair Exchange when running on a non-IT VPS IP).
+ADM_ALLOWED_BOOKMAKERS = {
+    "888sport",
+    "admiralbet",
+    "bet365",
+    "betfair",
+    "betflag",
+    "betsson",
+    "betway",
+    "bwin",
+    "bwin.it",
+    "eurobet",
+    "eurobet.it",
+    "goldbet",
+    "leovegas",
+    "lottomatica",
+    "marathonbet",
+    "netwin",
+    "planetwin365",
+    "sisal",
+    "snai",
+    "starcasino",
+    "unibet",
+    "unibet.it",
+    "william hill",
+}
+
+
+def is_adm_bookmaker(name: str) -> bool:
+    if not name:
+        return False
+    low = name.strip().lower()
+    if "exchange" in low:
+        return False
+    return low in ADM_ALLOWED_BOOKMAKERS
+
+
 def fetch_betexplorer_best_odds(match_href: str) -> Optional[Dict[str, Any]]:
     """
     Fetches live per-bookmaker 1X2 odds across active Italian ADM bookmakers
@@ -386,6 +468,8 @@ def fetch_betexplorer_best_odds(match_href: str) -> Optional[Dict[str, Any]]:
             else:
                 m_t = re.search(r'title="([^"]+)"', row)
                 bname = m_t.group(1).strip() if m_t else "Bookmaker"
+            if not is_adm_bookmaker(bname):
+                continue
             try:
                 q1, qx, q2 = float(vals[0]), float(vals[1]), float(vals[2])
                 if q1 > 1.01 and qx > 1.01 and q2 > 1.01:
@@ -464,6 +548,8 @@ def fetch_betexplorer_ou25_odds(match_href: str) -> Optional[Dict[str, Any]]:
                     bname = m_t.group(1).strip()
                 else:
                     bname = "Bookmaker"
+            if not is_adm_bookmaker(bname):
+                continue
             try:
                 qo, qu = float(vals[0]), float(vals[1])
                 if qo > 1.01 and qu > 1.01:
