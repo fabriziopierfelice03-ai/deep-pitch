@@ -1131,6 +1131,11 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
         odds_map = {"1": q1, "X": qx, "2": q2}
         avg_odds_map = {"1": avg_q1, "X": avg_qx, "2": avg_q2}
         probs_map = {"1": p1, "X": px, "2": p2}
+        raw_probs_map = {
+            "1": raw_v2_p["1"] / 100.0,
+            "X": raw_v2_p["X"] / 100.0,
+            "2": raw_v2_p["2"] / 100.0,
+        }
 
         # Pick at most the highest-EV actionable selection per match
         best_match_sel = None
@@ -1138,7 +1143,16 @@ def run_matchday_scan(mode: str = "auto", publish: bool = False, engine: str = "
         match_trap_reason = ""
         for sel in ["1", "X", "2"]:
             odd = odds_map[sel]
-            prob = probs_map[sel]
+            if engine == "v2":
+                # Defensive-only injury policy: unbacktested FotMob injury_logit_shift
+                # can ONLY reduce probability / block traps — NEVER inflate EV above pure OOS-calibrated v2.2
+                # nor invent bets where raw v2.2 is outside [min_ev_thr, max_ev_thr).
+                raw_ev = (raw_probs_map[sel] * odd) - 1.0
+                if not (min_ev_thr <= raw_ev < max_ev_thr):
+                    continue
+                prob = min(raw_probs_map[sel], probs_map[sel])
+            else:
+                prob = probs_map[sel]
             dec = calculate_quarter_kelly(
                 prob=prob,
                 bookmaker_odds=odd,
