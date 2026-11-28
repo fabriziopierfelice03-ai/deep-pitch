@@ -99,9 +99,9 @@ Date,League,Match,Bet,Bookmaker_odds,Model_probability,Fair_odds,EV_Perc,Stake_e
 28/11/26,D1,Paderborn-Schalke 04,Over 2.5,1.80,59.1%,1.69,6.37,21.70,Over 2.5,+17.36,1144.17
 29/11/26,F1,Toulouse-Rennes,Over 2.5,1.73,61.2%,1.63,5.92,22.08,,,
 28/11/26,F1,Le Mans-Lille,Over 2.5,2.10,50.4%,1.98,5.89,14.59,,,
-28/11/26,F1,Angers-Lens,Over 2.5,1.73,61.0%,1.64,5.58,20.84,,,
+28/11/26,F1,Angers-Lens,Over 2.5,1.73,61.0%,1.64,5.58,20.84,Over 2.5,+15.21,1159.38
 29/11/26,E0,Crystal Palace-Hull City,Over 2.5,1.73,60.8%,1.64,5.26,19.62,,,
-28/11/26,E0,Leeds United-Coventry City,Under 2.5,2.20,47.8%,2.09,5.19,11.78,Over 2.5,-11.78,1132.39
+28/11/26,E0,Leeds United-Coventry City,Under 2.5,2.20,47.8%,2.09,5.19,11.78,Over 2.5,-11.78,1147.60
 29/11/26,F1,Lyon-Monaco,Over 2.5,1.92,54.7%,1.83,5.01,14.84,,,
 29/11/26,E0,Brighton & Hove Albion-Newcastle United,Over 2.5,1.55,67.4%,1.48,4.53,22.43,,,
 29/11/26,SP1,Real Sociedad-Sevilla,Over 2.5,1.80,58.0%,1.72,4.44,15.14,,,
