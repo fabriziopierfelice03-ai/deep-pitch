@@ -87,7 +87,7 @@ Date,League,Match,Bet,Bookmaker_odds,Model_probability,Fair_odds,EV_Perc,Stake_e
 29/11/26,D1,Hoffenheim-Augsburg,1,1.75,59.2%,1.69,3.62,13.14,,,
 29/11/26,D1,Borussia Dortmund-Bayer Leverkusen,1,2.15,48.2%,2.08,3.61,8.55,,,
 28/11/26,I1,Frosinone-Parma,1,1.50,69.0%,1.45,3.53,19.24,1,+9.62,1099.57
-28/11/26,D1,Mainz 05-Union Berlin,1,1.51,68.4%,1.46,3.34,17.87,1,+18.13,1117.70
+28/11/26,D1,Mainz 05-Union Berlin,1,1.51,68.4%,1.46,3.34,17.87,1,+9.11,1108.68
 29/11/26,I1,Como-Juventus,X,3.60,28.6%,3.49,3.02,3.17,,,
 30/11/26,I1,Lecce-Atalanta,X,4.00,25.7%,3.89,2.84,2.58,,,
 29/11/26,D1,Freiburg-RB Leipzig,1,2.70,38.0%,2.63,2.73,4.38,,,
@@ -95,8 +95,8 @@ Date,League,Match,Bet,Bookmaker_odds,Model_probability,Fair_odds,EV_Perc,Stake_e
 28/11/26,SP1,Elche-Atlético Madrid,X,4.80,21.4%,4.68,2.53,1.81,,,
 28/11/26,F1,Nice-Troyes,Under 2.5,2.25,47.9%,2.09,7.70,16.77,,,
 28/11/26,I1,Inter-Genoa,Over 2.5,1.58,67.8%,1.48,7.11,32.70,,,
-28/11/26,D1,Mainz 05-Union Berlin,Over 2.5,1.57,67.9%,1.47,6.65,31.81,,,
-28/11/26,D1,Paderborn-Schalke 04,Over 2.5,1.80,59.1%,1.69,6.37,21.70,1,+17.36,1135.06
+28/11/26,D1,Mainz 05-Union Berlin,Over 2.5,1.57,67.9%,1.47,6.65,31.81,Over 2.5,+18.13,1126.81
+28/11/26,D1,Paderborn-Schalke 04,Over 2.5,1.80,59.1%,1.69,6.37,21.70,Over 2.5,+17.36,1144.17
 29/11/26,F1,Toulouse-Rennes,Over 2.5,1.73,61.2%,1.63,5.92,22.08,,,
 28/11/26,F1,Le Mans-Lille,Over 2.5,2.10,50.4%,1.98,5.89,14.59,,,
 28/11/26,F1,Angers-Lens,Over 2.5,1.73,61.0%,1.64,5.58,20.84,,,
